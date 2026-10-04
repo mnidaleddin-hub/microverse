@@ -3,51 +3,181 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Microverse Frontend</title>
+    <title>🌍 Microverse — AI Social Simulation</title>
     <link rel="stylesheet" href="style.css">
     <script src="https://cdn.jsdelivr.net/npm/pixi.js@7/dist/pixi.min.js"></script>
 </head>
 <body>
     <div id="app">
-        <div id="game-container"></div>
+        <div id="game-wrapper">
+            <div id="game-header">
+                <h1>🌍 Microverse</h1>
+                <div id="connection-status">
+                    <span id="status-dot" class="status-dot status-connecting"></span>
+                    <span id="status-text">Connecting...</span>
+                </div>
+            </div>
+            <div id="zoom-controls">
+                <button id="zoom-in-btn" title="Zoom In">➕</button>
+                <button id="zoom-out-btn" title="Zoom Out">➖</button>
+                <button id="zoom-center-btn" title="Center View">🎯</button>
+                <div id="zoom-level">100%</div>
+            </div>
+            <div id="game-container"></div>
+        </div>
+
         <div id="sidebar">
-            <h2>Dashboard</h2>
-            <p>Tick: <span id="current-tick">0</span></p>
-            <p>Agent Count: <span id="agent-count">0</span></p>
-            <h3>Event Log</h3>
-            <ul id="event-log"></ul>
+            <div id="sidebar-header">
+                <h2>📊 Dashboard</h2>
+            </div>
+
+            <div id="dashboard-cards">
+                <div class="stat-card card-tick">
+                    <div class="card-icon">⏱️</div>
+                    <div class="card-info">
+                        <div class="card-label">Tick</div>
+                        <div class="card-value" id="current-tick">0</div>
+                    </div>
+                </div>
+
+                <div class="stat-card card-agents">
+                    <div class="card-icon">👥</div>
+                    <div class="card-info">
+                        <div class="card-label">Agents</div>
+                        <div class="card-value">
+                            <span id="agent-count">0</span>
+                            <span class="sub-count">♂ <span id="male-count">0</span> / ♀ <span id="female-count">0</span></span>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="stat-card card-status">
+                    <div class="card-icon">💚</div>
+                    <div class="card-info">
+                        <div class="card-label">Alive / Dead</div>
+                        <div class="card-value">
+                            <span class="alive-count" id="alive-count">0</span>
+                            <span class="slash">/</span>
+                            <span class="dead-count" id="dead-count">0</span>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="stat-card card-states">
+                    <div class="card-icon">🎭</div>
+                    <div class="card-info">
+                        <div class="card-label">States</div>
+                        <div class="card-value states-list" id="states-list">-</div>
+                    </div>
+                </div>
+
+                <div class="stat-card card-resources">
+                    <div class="card-icon">📦</div>
+                    <div class="card-info">
+                        <div class="card-label">Resources</div>
+                        <div class="card-value resources-list">
+                            <span title="Wheat">🌾 <span id="wheat-total">0</span></span>
+                            <span title="Wood">🪵 <span id="wood-total">0</span></span>
+                            <span title="Stone">🪨 <span id="stone-total">0</span></span>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="stat-card card-pregnant">
+                    <div class="card-icon">🤰</div>
+                    <div class="card-info">
+                        <div class="card-label">Pregnant</div>
+                        <div class="card-value" id="pregnant-count">0</div>
+                    </div>
+                </div>
+            </div>
+
+            <div id="event-log-section">
+                <div id="event-log-header">
+                    <h3>📜 Event Log</h3>
+                    <button id="clear-log-btn" title="Clear Log">🗑️</button>
+                </div>
+                <ul id="event-log"></ul>
+            </div>
         </div>
     </div>
+
     <div id="control-panel">
-        <button id="pause-btn">⏸ Pause</button>
-        <button id="resume-btn">▶ Resume</button>
-        <button id="speed-10x-btn">🐢 10x</button>
-        <button id="speed-1x-btn">⏱ 1x</button>
-        <button id="speed-100x-btn">⚡ 100x</button>
-        <button id="reset-btn">🔄 Reset</button>
+        <div class="control-group">
+            <span class="group-label">Playback</span>
+            <button id="pause-btn" class="ctrl-btn">⏸ Pause</button>
+            <button id="resume-btn" class="ctrl-btn">▶ Resume</button>
+            <button id="reset-btn" class="ctrl-btn danger">🔄 Reset</button>
+        </div>
+        <div class="divider"></div>
+        <div class="control-group">
+            <span class="group-label">Speed</span>
+            <button id="speed-01x-btn" class="speed-btn" data-speed="0.01">⚡ 100x</button>
+            <button id="speed-10x-btn" class="speed-btn" data-speed="0.1">🐢 10x</button>
+            <button id="speed-1x-btn" class="speed-btn active" data-speed="1.0">⏱ 1x</button>
+        </div>
     </div>
 
     <div id="agent-details-popup" class="popup">
         <div class="popup-content">
             <span class="close-button">&times;</span>
-            <h3>Agent Details</h3>
-            <p>Name: <span id="detail-name"></span></p>
-            <p>Gender: <span id="detail-gender"></span></p>
-            <p>Age: <span id="detail-age"></span></p>
-            <div class="stat-bar">
-                <span>HP:</span><div class="bar-container"><div id="detail-hp" class="bar"></div></div>
+            <h3 id="detail-title">👤 Agent Details</h3>
+
+            <div class="detail-header">
+                <div class="avatar-circle" id="detail-avatar"></div>
+                <div class="basic-info">
+                    <p class="name-line"><strong id="detail-name">-</strong> <span id="detail-gender-badge" class="gender-badge">-</span></p>
+                    <p class="sub-line">Age: <span id="detail-age">-</span> • State: <span id="detail-state-badge" class="state-badge">-</span></p>
+                </div>
             </div>
-            <div class="stat-bar">
-                <span>Hunger:</span><div class="bar-container"><div id="detail-hunger" class="bar"></div></div>
+
+            <div class="stats-section">
+                <div class="stat-bar">
+                    <span class="stat-label">❤️ HP</span>
+                    <div class="bar-container"><div id="detail-hp" class="bar bar-hp"></div></div>
+                    <span class="stat-num" id="detail-hp-num">0%</span>
+                </div>
+                <div class="stat-bar">
+                    <span class="stat-label">🍕 Hunger</span>
+                    <div class="bar-container"><div id="detail-hunger" class="bar bar-hunger"></div></div>
+                    <span class="stat-num" id="detail-hunger-num">0%</span>
+                </div>
+                <div class="stat-bar">
+                    <span class="stat-label">⚡ Energy</span>
+                    <div class="bar-container"><div id="detail-energy" class="bar bar-energy"></div></div>
+                    <span class="stat-num" id="detail-energy-num">0%</span>
+                </div>
+                <div class="stat-bar">
+                    <span class="stat-label">😊 Mood</span>
+                    <div class="bar-container"><div id="detail-mood" class="bar bar-mood"></div></div>
+                    <span class="stat-num" id="detail-mood-num">0%</span>
+                </div>
             </div>
-            <div class="stat-bar">
-                <span>Energy:</span><div class="bar-container"><div id="detail-energy" class="bar"></div></div>
+
+            <div class="traits-section">
+                <h4>🧬 Traits</h4>
+                <div class="traits-grid" id="detail-traits">
+                    <div class="trait-item"><span>🛡️ Courage</span><div class="mini-bar"><div id="trait-courage"></div></div></div>
+                    <div class="trait-item"><span>🧠 Intelligence</span><div class="mini-bar"><div id="trait-intelligence"></div></div></div>
+                    <div class="trait-item"><span>👶 Fertility</span><div class="mini-bar"><div id="trait-fertility"></div></div></div>
+                    <div class="trait-item"><span>⚔️ Aggression</span><div class="mini-bar"><div id="trait-aggression"></div></div></div>
+                </div>
             </div>
-            <div class="stat-bar">
-                <span>Mood:</span><div class="bar-container"><div id="detail-mood" class="bar"></div></div>
+
+            <div class="inventory-section">
+                <h4>🎒 Inventory</h4>
+                <div class="inventory-list">
+                    <span>🌾 Wheat: <strong id="detail-wheat">0</strong></span>
+                    <span>🪵 Wood: <strong id="detail-wood">0</strong></span>
+                    <span>🪨 Stone: <strong id="detail-stone">0</strong></span>
+                    <span>💰 Money: <strong id="detail-money">0</strong></span>
+                </div>
             </div>
-            <p>State: <span id="detail-state"></span></p>
-            <p>Relationships: <span id="detail-relationships"></span></p>
+
+            <div class="relations-section">
+                <h4>❤️ Relationships</h4>
+                <p id="detail-relationships" class="relations-list">None</p>
+            </div>
         </div>
     </div>
 
