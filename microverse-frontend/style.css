@@ -1,0 +1,140 @@
+body {
+    margin: 0;
+    font-family: Arial, sans-serif;
+    background-color: #f0f0f0;
+    display: flex;
+    flex-direction: column;
+    height: 100vh;
+    overflow: hidden;
+}
+
+#app {
+    display: flex;
+    flex-grow: 1;
+    overflow: hidden;
+}
+
+#game-container {
+    width: 640px; /* 40 * 16px */
+    height: 640px; /* 40 * 16px */
+    background-color: #ccc;
+    border: 1px solid #333;
+    margin: 10px;
+    position: relative;
+    overflow: hidden; /* Ensure PixiJS content stays within bounds */
+}
+
+#sidebar {
+    width: 300px;
+    background-color: #e0e0e0;
+    padding: 10px;
+    margin: 10px 10px 10px 0;
+    border: 1px solid #ccc;
+    overflow-y: auto;
+}
+
+#sidebar h2,
+#sidebar h3 {
+    margin-top: 0;
+}
+
+#event-log {
+    list-style: none;
+    padding: 0;
+    margin: 0;
+    font-size: 0.9em;
+}
+
+#event-log li {
+    margin-bottom: 5px;
+    border-bottom: 1px dotted #ccc;
+    padding-bottom: 3px;
+}
+
+#control-panel {
+    display: flex;
+    justify-content: center;
+    padding: 10px;
+    background-color: #333;
+    gap: 10px;
+}
+
+#control-panel button {
+    padding: 10px 15px;
+    font-size: 1em;
+    cursor: pointer;
+    background-color: #555;
+    color: white;
+    border: none;
+    border-radius: 5px;
+    transition: background-color 0.2s;
+}
+
+#control-panel button:hover {
+    background-color: #777;
+}
+
+/* Agent Details Popup */
+.popup {
+    display: none; /* Hidden by default */
+    position: fixed; /* Stay in place */
+    z-index: 100; /* Sit on top */
+    left: 0;
+    top: 0;
+    width: 100%; /* Full width */
+    height: 100%; /* Full height */
+    overflow: auto; /* Enable scroll if needed */
+    background-color: rgba(0,0,0,0.4); /* Black w/ opacity */
+}
+
+.popup-content {
+    background-color: #fefefe;
+    margin: 5% auto;
+    padding: 20px;
+    border: 1px solid #888;
+    width: 80%;
+    max-width: 500px;
+    border-radius: 10px;
+    position: relative;
+}
+
+.close-button {
+    color: #aaa;
+    float: right;
+    font-size: 28px;
+    font-weight: bold;
+}
+
+.close-button:hover,
+.close-button:focus {
+    color: black;
+    text-decoration: none;
+    cursor: pointer;
+}
+
+.stat-bar {
+    display: flex;
+    align-items: center;
+    margin-bottom: 5px;
+}
+
+.stat-bar span {
+    width: 80px;
+    font-weight: bold;
+    font-size: 0.9em;
+}
+
+.bar-container {
+    flex-grow: 1;
+    height: 10px;
+    background-color: #ddd;
+    border-radius: 5px;
+    overflow: hidden;
+}
+
+.bar {
+    height: 100%;
+    width: 0%; /* Will be set dynamically */
+    background-color: #4CAF50; /* Default color */
+    border-radius: 5px;
+}

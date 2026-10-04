@@ -1,0 +1,56 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Microverse Frontend</title>
+    <link rel="stylesheet" href="style.css">
+    <script src="https://cdn.jsdelivr.net/npm/pixi.js@7/dist/pixi.min.js"></script>
+</head>
+<body>
+    <div id="app">
+        <div id="game-container"></div>
+        <div id="sidebar">
+            <h2>Dashboard</h2>
+            <p>Tick: <span id="current-tick">0</span></p>
+            <p>Agent Count: <span id="agent-count">0</span></p>
+            <h3>Event Log</h3>
+            <ul id="event-log"></ul>
+        </div>
+    </div>
+    <div id="control-panel">
+        <button id="pause-btn">⏸ Pause</button>
+        <button id="resume-btn">▶ Resume</button>
+        <button id="speed-10x-btn">🐢 10x</button>
+        <button id="speed-1x-btn">⏱ 1x</button>
+        <button id="speed-100x-btn">⚡ 100x</button>
+        <button id="reset-btn">🔄 Reset</button>
+    </div>
+
+    <div id="agent-details-popup" class="popup">
+        <div class="popup-content">
+            <span class="close-button">&times;</span>
+            <h3>Agent Details</h3>
+            <p>Name: <span id="detail-name"></span></p>
+            <p>Gender: <span id="detail-gender"></span></p>
+            <p>Age: <span id="detail-age"></span></p>
+            <div class="stat-bar">
+                <span>HP:</span><div class="bar-container"><div id="detail-hp" class="bar"></div></div>
+            </div>
+            <div class="stat-bar">
+                <span>Hunger:</span><div class="bar-container"><div id="detail-hunger" class="bar"></div></div>
+            </div>
+            <div class="stat-bar">
+                <span>Energy:</span><div class="bar-container"><div id="detail-energy" class="bar"></div></div>
+            </div>
+            <div class="stat-bar">
+                <span>Mood:</span><div class="bar-container"><div id="detail-mood" class="bar"></div></div>
+            </div>
+            <p>State: <span id="detail-state"></span></p>
+            <p>Relationships: <span id="detail-relationships"></span></p>
+        </div>
+    </div>
+
+    <script src="main.js"></script>
+</body>
+</html>
