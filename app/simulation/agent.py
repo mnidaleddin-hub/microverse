@@ -3,9 +3,10 @@ from __future__ import annotations
 import random
 from typing import TYPE_CHECKING
 
+from app.config import DIALOG_TEMPLATES, settings
 from app.simulation.farming import harvest as do_harvest, plant as do_plant
 from app.simulation.pathfinding import bfs_next_step
-from app.simulation.reproduction import check_reproduction, give_birth
+from app.simulation.reproduction import PREGNANCY_DURATION_TICKS, check_reproduction, give_birth
 
 if TYPE_CHECKING:
     from app.schemas import AgentSchema, EventItem, Tile
@@ -30,7 +31,6 @@ def random_gender() -> str:
     return random.choice(["male", "female"])
 
 
-# خلق كائن جديد بموقع عشوائي على grass
 def create_random_agent(
     agent_id: int, grid: list[list["Tile"]], grid_size: int
 ) -> "AgentSchema":
@@ -71,7 +71,6 @@ def create_random_agent(
     )
 
 
-# التحرك إلى tile مجاور عشوائي (grass فقط)
 def _random_walk(agent: "AgentSchema", grid: list[list["Tile"]], grid_size: int) -> None:
     directions = [(0, -1), (1, 0), (0, 1), (-1, 0)]
     random.shuffle(directions)
@@ -87,7 +86,6 @@ def _random_walk(agent: "AgentSchema", grid: list[list["Tile"]], grid_size: int)
                 return
 
 
-# مقارنة سابقة للكائن لتحديد delta
 def snapshot_agent(agent: "AgentSchema") -> dict:
     return {
         "x": agent.x,
@@ -100,10 +98,96 @@ def snapshot_agent(agent: "AgentSchema") -> dict:
         "age": agent.age,
         "inventory_wheat": agent.inventory.wheat,
         "pregnancy_ticks": agent.pregnancy_ticks,
+        "chat_bubble_text": agent.chat_bubble_text,
     }
 
 
-# تشغيل Utility AI للكائن الواحد
+def _increase_trust(agent_a: "AgentSchema", agent_b: "AgentSchema", amount: float = 1.0) -> None:
+    def _clamp(v: float) -> float:
+        return max(-100.0, min(100.0, v))
+
+    cur_ab = agent_a.relationships.get(agent_b.id, 0.0)
+    agent_a.relationships[agent_b.id] = _clamp(cur_ab + amount)
+
+    cur_ba = agent_b.relationships.get(agent_a.id, 0.0)
+    agent_b.relationships[agent_a.id] = _clamp(cur_ba + amount)
+
+
+def _set_chat_bubble(agent: "AgentSchema", text: str, ticks: int = 180) -> None:
+    agent.chat_bubble_text = text
+    agent.chat_bubble_ticks_left = ticks
+
+
+def _social_interaction(
+    agent: "AgentSchema",
+    all_agents: dict[int, "AgentSchema"],
+    tick: int,
+) -> list["EventItem"]:
+    from app.schemas import EventItem
+
+    events: list[EventItem] = []
+    if agent.state == "dead":
+        return events
+    if agent.pregnancy_ticks > 0:
+        return events
+
+    partners_here = [
+        a for a in all_agents.values()
+        if a.id != agent.id
+        and a.state != "dead"
+        and a.x == agent.x
+        and a.y == agent.y
+    ]
+    if not partners_here:
+        return events
+
+    for partner in partners_here:
+        _increase_trust(agent, partner, amount=1.0)
+
+        avg_trust = (
+            agent.relationships.get(partner.id, 0.0)
+            + partner.relationships.get(agent.id, 0.0)
+        ) / 2.0
+
+        if avg_trust >= 0.0 and random.random() < 0.18:
+            text = random.choice(DIALOG_TEMPLATES)
+            _set_chat_bubble(agent, text)
+            events.append(EventItem(
+                tick=tick, agent_id=agent.id, type="chat",
+                text=f"Agent {agent.id} ({agent.name}) says: {text}",
+                payload={"partner_id": partner.id, "text": text},
+            ))
+
+        social_states = {"idle", "walking"}
+        if agent.state in social_states and partner.state in social_states:
+            if check_reproduction(agent, partner):
+                female = agent if agent.gender == "female" else partner
+                male = partner if agent.gender == "female" else agent
+
+                if female.pregnancy_ticks == 0:
+                    female.pregnancy_ticks = PREGNANCY_DURATION_TICKS
+                    female.pregnancy_partner_id = male.id
+                    female.state = "pregnant"
+                    female.mood = min(100.0, female.mood + 20.0)
+                    male.mood = min(100.0, male.mood + 20.0)
+
+                    preg_text = f"🤰 {female.name} is now pregnant by {male.name}!"
+                    _set_chat_bubble(female, preg_text)
+
+                    events.append(EventItem(
+                        tick=tick, agent_id=female.id, type="pregnant",
+                        text=preg_text,
+                        payload={
+                            "mother_id": female.id,
+                            "father_id": male.id,
+                            "duration": PREGNANCY_DURATION_TICKS,
+                        },
+                    ))
+                    break
+
+    return events
+
+
 def run_agent_ai(
     agent: "AgentSchema",
     grid: list[list["Tile"]],
@@ -115,7 +199,6 @@ def run_agent_ai(
 
     events: list[EventItem] = []
 
-    # 1. فحص الموت (لا ننفذه فعلياً في المرحلة 1 لكن نحفظ الشرط)
     if agent.state == "dead":
         return events
     if agent.hp <= 0:
@@ -128,9 +211,13 @@ def run_agent_ai(
         return events
 
     agent.last_decision_tick = tick
-    agent.age += 0  # العمر يزيد سنوياً في منطق آخر، هنا 0 حتى لا يفرط
+    agent.age += 0
 
-    # 2. فحص الحمل والولادة
+    # 0. ⭐ أولاً: التفاعل الاجتماعي بناءً على الموقع الحالي (قبل أي حركة)
+    #    مهم جداً: لأن أي حركة لاحقة ستغيّر x,y وستفوت فرصة اللقاء
+    events.extend(_social_interaction(agent, all_agents, tick))
+
+    # 1. فحص الحمل والولادة
     if agent.pregnancy_ticks > 0:
         agent.state = "pregnant"
         agent.pregnancy_ticks -= 1
@@ -139,18 +226,19 @@ def run_agent_ai(
             if agent.pregnancy_partner_id is not None:
                 father = all_agents.get(agent.pregnancy_partner_id)
             if father is not None:
-                baby = give_birth(agent, father)
+                next_id = max(list(all_agents.keys()) + [settings.AGENT_COUNT]) + 1
+                baby = give_birth(agent, father, next_id)
                 if baby is not None:
                     events.append(EventItem(
                         tick=tick, agent_id=baby.id, type="birth",
-                        text=f"Baby {baby.id} ({baby.name}) born to {agent.name}",
+                        text=f"Baby {baby.id} ({baby.name}) born to {agent.name} & {father.name}",
                         payload={"baby_id": baby.id, "mother_id": agent.id, "father_id": father.id},
                     ))
                     all_agents[baby.id] = baby
             agent.pregnancy_partner_id = None
         return events
 
-    # 3. فحص انخفاض الطاقة → نوم
+    # 2. فحص انخفاض الطاقة → نوم
     if agent.energy < 20:
         agent.state = "sleeping"
         agent.energy = min(100.0, agent.energy + 0.5)
@@ -162,15 +250,12 @@ def run_agent_ai(
         ))
         return events
 
-    # زيادة الجوع تدريجياً
     agent.hunger = min(100.0, agent.hunger + 0.3)
-    # خفض الطاقة تدريجياً
     agent.energy = max(0.0, agent.energy - 0.1)
-    # الصحة إذا كان الجوع 100
     if agent.hunger >= 100:
         agent.hp = max(0.0, agent.hp - 0.2)
 
-    # 4. فحص الجوع المرتفع → أكل أو البحث عن مزرعة
+    # 3. فحص الجوع المرتفع → أكل أو البحث عن مزرعة
     if agent.hunger > 70:
         if agent.inventory.wheat > 0:
             agent.inventory.wheat -= 1
@@ -183,7 +268,6 @@ def run_agent_ai(
             ))
             return events
         else:
-            # البحث عن أقرب farmland ناضجة باستخدام BFS
             def ripe_farmland(x: int, y: int, tile: "Tile") -> bool:
                 return tile.type == 2 and tile.crop_growth >= 100.0
 
@@ -198,7 +282,7 @@ def run_agent_ai(
                 ))
                 return events
 
-    # 5. إذا واقف على farmland ناضجة → احصد
+    # 4. إذا واقف على farmland ناضجة → احصد
     current_tile = grid[agent.y][agent.x]
     if current_tile.type == 2 and current_tile.crop_growth >= 100.0:
         if do_harvest(agent, current_tile):
@@ -210,7 +294,7 @@ def run_agent_ai(
             ))
             return events
 
-    # 6. إذا واقف على farmland فارغة ويمتلك قمح كافٍ → ازرع
+    # 5. إذا واقف على farmland فارغة ويمتلك قمح كافٍ → ازرع
     if current_tile.type == 2 and current_tile.crop_growth <= 0.0:
         if do_plant(agent, current_tile):
             agent.state = "farming"
@@ -221,6 +305,9 @@ def run_agent_ai(
             ))
             return events
 
-    # 7. لا شيء آخر → تجول عشوائي
+    # 6. لا شيء آخر → تجول عشوائي
     _random_walk(agent, grid, grid_size)
+    if agent.state != "walking":
+        agent.state = "idle"
+
     return events

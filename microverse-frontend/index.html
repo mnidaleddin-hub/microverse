@@ -3,34 +3,119 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>🌍 Microverse — AI Social Simulation</title>
+    <title>🌍 Microverse — AI Social Simulation v2</title>
     <link rel="stylesheet" href="style.css">
+
+    <!-- PixiJS 7 — المحرك الرسومي الأساسي -->
     <script src="https://cdn.jsdelivr.net/npm/pixi.js@7/dist/pixi.min.js"></script>
+
+    <!-- Chart.js 4 — الرسوم البيانية الحية (StatsManager) -->
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4/dist/chart.umd.min.js"></script>
+
+    <!-- Howler.js 2.2 — إدارة المؤثرات الصوتية الخفيفة (SoundManager) -->
+    <script src="https://cdn.jsdelivr.net/npm/howler@2.2.4/dist/howler.min.js"></script>
 </head>
 <body>
     <div id="app">
+        <!-- LEFT / CENTER: GAME AREA + HEADER + CONTROLS + MINIMAP -->
         <div id="game-wrapper">
             <div id="game-header">
-                <h1>🌍 Microverse</h1>
-                <div id="connection-status">
-                    <span id="status-dot" class="status-dot status-connecting"></span>
-                    <span id="status-text">Connecting...</span>
+                <h1>🌍 Microverse <span class="header-badge">v2</span></h1>
+
+                <div id="header-tools">
+                    <!-- حالة الاتصال بالـ Backend -->
+                    <div id="connection-status">
+                        <span id="status-dot" class="status-dot status-connecting"></span>
+                        <span id="status-text">Connecting...</span>
+                    </div>
+
+                    <div class="header-divider"></div>
+
+                    <!-- زر متابعة الكائن المحدد -->
+                    <button id="follow-btn" class="tool-btn" title="Follow selected agent (if any)">
+                        👁️ <span class="tool-text">Follow</span>
+                    </button>
+
+                    <!-- زر كتم الصوت / تشغيله (أول تفاعل يسمح بالصوت — Browser Policy) -->
+                    <button id="mute-btn" class="tool-btn" title="Enable / Disable sounds (no autoplay)">
+                        🔇 <span class="tool-text">Muted</span>
+                    </button>
+
+                    <div class="header-divider"></div>
+
+                    <!-- الوقت الحالي في العالم (Day/Night) -->
+                    <div id="world-clock" title="In-world time">
+                        <span id="clock-icon">☀️</span>
+                        <span id="clock-text">Day 1 · 12:00</span>
+                    </div>
+
+                    <!-- الطقس الحالي في العالم -->
+                    <div id="world-weather" title="Weather">
+                        <span id="weather-icon">🌤️</span>
+                        <span id="weather-text">Clear</span>
+                    </div>
                 </div>
             </div>
-            <div id="zoom-controls">
-                <button id="zoom-in-btn" title="Zoom In">➕</button>
-                <button id="zoom-out-btn" title="Zoom Out">➖</button>
-                <button id="zoom-center-btn" title="Center View">🎯</button>
-                <div id="zoom-level">100%</div>
+
+            <!-- منطقة اللعب الرئيسية (PixiJS lives here) -->
+            <div id="game-container">
+
+                <!-- أزرار التحكم بالتكبير/التصغير فوق الشاشة -->
+                <div id="zoom-controls">
+                    <button id="zoom-in-btn" title="Zoom In">➕</button>
+                    <button id="zoom-out-btn" title="Zoom Out">➖</button>
+                    <button id="zoom-center-btn" title="Center View + Reset Zoom">🎯</button>
+                    <div id="zoom-level">100%</div>
+                </div>
+
+                <!-- الخريطة المصغرة (Minimap) — زاوية سفلية-يسار -->
+                <div id="minimap-container">
+                    <div id="minimap-header">🗺️ Minimap</div>
+                    <canvas id="minimap-canvas" width="120" height="120"></canvas>
+                    <div id="minimap-legend">
+                        <span class="legend-item"><span class="legend-color legend-water"></span>Water</span>
+                        <span class="legend-item"><span class="legend-color legend-grass"></span>Grass</span>
+                        <span class="legend-item"><span class="legend-color legend-farm"></span>Farm</span>
+                        <span class="legend-item"><span class="legend-color legend-forest"></span>Forest</span>
+                        <span class="legend-item"><span class="legend-color legend-male"></span>♂</span>
+                        <span class="legend-item"><span class="legend-color legend-female"></span>♀</span>
+                    </div>
+                </div>
+
             </div>
-            <div id="game-container"></div>
         </div>
 
+        <!-- RIGHT: SIDEBAR — DASHBOARD 6 CARDS + EVENT LOG + CHARTS PANEL -->
         <div id="sidebar">
             <div id="sidebar-header">
                 <h2>📊 Dashboard</h2>
+                <button id="toggle-charts-btn" class="tool-btn" title="Toggle live charts panel">
+                    📈 <span class="tool-text">Charts</span>
+                </button>
             </div>
 
+            <!-- اللوحة القابلة للطي — الرسوم البيانية الحية (Charts Panel) -->
+            <div id="charts-panel" class="collapsed">
+                <div class="panel-header">
+                    <h3>📈 Live Trends (last 60 ticks)</h3>
+                </div>
+                <div class="charts-grid">
+                    <div class="chart-card">
+                        <div class="chart-title">👥 Population</div>
+                        <canvas id="chart-population" height="120"></canvas>
+                    </div>
+                    <div class="chart-card">
+                        <div class="chart-title">🍕 Avg Hunger</div>
+                        <canvas id="chart-hunger" height="120"></canvas>
+                    </div>
+                    <div class="chart-card">
+                        <div class="chart-title">🌾 Total Wheat</div>
+                        <canvas id="chart-wheat" height="120"></canvas>
+                    </div>
+                </div>
+            </div>
+
+            <!-- الـ 6 بطاقات إحصائية -->
             <div id="dashboard-cards">
                 <div class="stat-card card-tick">
                     <div class="card-icon">⏱️</div>
@@ -92,6 +177,7 @@
                 </div>
             </div>
 
+            <!-- سجل الأحداث الملون -->
             <div id="event-log-section">
                 <div id="event-log-header">
                     <h3>📜 Event Log</h3>
@@ -102,6 +188,7 @@
         </div>
     </div>
 
+    <!-- لوحة التحكم السفلية (Playback + Speed Presets + Active State) -->
     <div id="control-panel">
         <div class="control-group">
             <span class="group-label">Playback</span>
@@ -118,16 +205,23 @@
         </div>
     </div>
 
+    <!-- نافذة تفاصيل الكائن (Popup) — محدثة مع Avatar + Traits + Inventory -->
     <div id="agent-details-popup" class="popup">
         <div class="popup-content">
             <span class="close-button">&times;</span>
             <h3 id="detail-title">👤 Agent Details</h3>
 
             <div class="detail-header">
-                <div class="avatar-circle" id="detail-avatar"></div>
+                <div class="avatar-circle" id="detail-avatar">?</div>
                 <div class="basic-info">
-                    <p class="name-line"><strong id="detail-name">-</strong> <span id="detail-gender-badge" class="gender-badge">-</span></p>
-                    <p class="sub-line">Age: <span id="detail-age">-</span> • State: <span id="detail-state-badge" class="state-badge">-</span></p>
+                    <p class="name-line">
+                        <strong id="detail-name">-</strong>
+                        <span id="detail-gender-badge" class="gender-badge">-</span>
+                    </p>
+                    <p class="sub-line">
+                        Age: <span id="detail-age">-</span> ·
+                        State: <span id="detail-state-badge" class="state-badge">-</span>
+                    </p>
                 </div>
             </div>
 
@@ -181,6 +275,7 @@
         </div>
     </div>
 
+    <!-- الملف الرئيسي للمنطق (6 Managers داخله) -->
     <script src="main.js"></script>
 </body>
 </html>

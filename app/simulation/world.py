@@ -14,8 +14,10 @@ from app.schemas import (
     SSEData,
     Tile,
     Traits,
+    WorldUpdate,
 )
 from app.simulation.agent import create_random_agent, run_agent_ai, snapshot_agent
+from app.simulation.ecology import EcologyManager
 from app.simulation.farming import tick_crops
 
 if TYPE_CHECKING:
@@ -35,6 +37,10 @@ class World:
         self.sse_clients: set[Queue[str]] = set()
         self._current_events: list[EventItem] = []
         self._lock = asyncio.Lock()
+        self.ecology: EcologyManager = EcologyManager()  # Manager الفصول والطقس
+        # --- اقتصاد مصغر ---
+        self.market_price: dict[str, float] = {"wheat": 1.0, "wood": 1.0, "stone": 1.0}
+        self._last_market_price: dict[str, float] | None = None
 
     def _generate_map(self) -> list[list[Tile]]:
         grid: list[list[Tile]] = []
@@ -255,10 +261,54 @@ class World:
         for q in dead:
             self.sse_clients.discard(q)
 
+    def _recalc_market_price(self) -> bool:
+        """إعادة حساب أسعار الموارد بناءً على الإجمالي لدى جميع الكائنات. ترجع True إذا تغير السعر."""
+        total_wheat = 0
+        total_wood = 0
+        total_stone = 0
+        for a in self.agents.values():
+            total_wheat += int(a.inventory.wheat or 0)
+            total_wood += int(a.inventory.wood or 0)
+            total_stone += int(a.inventory.stone or 0)
+
+        new_wheat = 1.0
+        if total_wheat > 100:
+            ratio = 100.0 / max(1.0, total_wheat)
+            new_wheat = max(0.25, min(1.0, ratio))
+        elif total_wheat < 30:
+            new_wheat = min(2.5, 1.0 + (30 - total_wheat) * 0.03)
+
+        new_prices = {
+            "wheat": round(new_wheat, 3),
+            "wood": round(1.0 + max(0, 20 - total_wood) * 0.02, 3),
+            "stone": round(1.0 + max(0, 10 - total_stone) * 0.04, 3),
+        }
+
+        changed = (
+            self._last_market_price is None
+            or abs(new_prices["wheat"] - self.market_price.get("wheat", 1.0)) > 0.01
+            or abs(new_prices["wood"] - self.market_price.get("wood", 1.0)) > 0.01
+            or abs(new_prices["stone"] - self.market_price.get("stone", 1.0)) > 0.01
+        )
+
+        self._last_market_price = dict(self.market_price)
+        self.market_price = new_prices
+        return changed
+
     async def do_tick(self) -> None:
+        # --- [MICRO-QWEN] تحديث الفصول والطقس أولًا قبل أي منطق آخر
+        self.ecology.tick(self)
+
         self.tick += 1
 
         tick_crops(self.map_grid)
+
+        # --- [MICRO-B] إدارة فقاعات الدردشة لكل agent: تنقيص ticks_left أو تعيين None عند الصفر
+        for agent in self.agents.values():
+            if agent.chat_bubble_ticks_left > 0:
+                agent.chat_bubble_ticks_left -= 1
+                if agent.chat_bubble_ticks_left <= 0 and agent.chat_bubble_text is not None:
+                    agent.chat_bubble_text = None  # لينتج delta مع chat_bubble_text = None للمرة الأولى فقط للمحافظة على delta صغير
 
         snapshots: dict[int, dict] = {aid: snapshot_agent(a) for aid, a in self.agents.items()}
 
@@ -268,6 +318,27 @@ class World:
             evs = run_agent_ai(agent, self.map_grid, self.grid_size, self.tick, self.agents)
             all_events.extend(evs)
 
+        # --- مزامنة next_agent_id بعد الولادات (لأن agent.py يستخدم max(all_agents)+1 أحياناً)
+        if self.agents:
+            max_id = max(self.agents.keys())
+            if max_id >= self.next_agent_id:
+                self.next_agent_id = max_id + 1
+
+        # --- [قيود حمراء QWEN #2: MAX_AGENTS = 50] إزالة أي أطفال تم إنتاجهم تجاوز الحد
+        if len(self.agents) > settings.MAX_AGENTS:
+            # نحافظ على الـ agents الأقدم (أقدم id)، نحذف الجديد تجاوز الحد
+            sorted_ids = sorted(self.agents.keys())
+            to_remove = sorted_ids[settings.MAX_AGENTS:]
+            for rid in to_remove:
+                a = self.agents.pop(rid, None)
+                if a is not None:
+                    all_events.append(EventItem(
+                        tick=self.tick, agent_id=a.id, type="capped",
+                        text=f"Agent {a.id} removed (MAX_AGENTS={settings.MAX_AGENTS} cap enforced)",
+                        payload={"name": a.name, "reason": "MAX_AGENTS_CAP"},
+                    ))
+
+        # تطبيق Batch Events المناطق: إضافة أحداث الـ tick الحالي لمجموعة التخزين المؤقتة للـ Persist
         self._current_events.extend(all_events)
 
         deltas: list[AgentDelta] = []
@@ -307,10 +378,35 @@ class World:
             if prev["pregnancy_ticks"] != agent.pregnancy_ticks:
                 d.pregnancy_ticks = agent.pregnancy_ticks
                 changed = True
+            # MICRO-B: إرسال chat_bubble_text إذا تغير (بما في ذلك None للإخفاء الفوري)
+            if prev.get("chat_bubble_text", "__MISSING__") != agent.chat_bubble_text:
+                d.chat_bubble_text = agent.chat_bubble_text
+                changed = True
             if changed:
                 deltas.append(d)
 
-        sse_data = SSEData(tick=self.tick, agents_delta=deltas, new_events=all_events)
+        # --- حساب السوق كل 60 ticks + world_update إذا تغير شيء ---
+        eco_changed = self.ecology.has_changed()
+        market_changed = False
+        if self.tick % settings.SAVE_INTERVAL_TICKS == 0:
+            market_changed = self._recalc_market_price()
+
+        world_update_obj: WorldUpdate | None = None
+        if eco_changed or market_changed:
+            eco_state = self.ecology.get_state()
+            world_update_obj = WorldUpdate(
+                season=eco_state.get("season") if eco_changed else None,
+                weather=eco_state.get("weather") if eco_changed else None,
+                grid_delta=None,
+                market_price=dict(self.market_price) if market_changed else None,
+            )
+
+        sse_data = SSEData(
+            tick=self.tick,
+            agents_delta=deltas,
+            new_events=all_events,
+            world_update=world_update_obj,  # None في الغالب، وobject فقط عند التغيير
+        )
         await self._broadcast_sse(sse_data)
 
         if self.tick % settings.SAVE_INTERVAL_TICKS == 0:

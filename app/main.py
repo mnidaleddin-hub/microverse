@@ -16,6 +16,7 @@ from app.schemas import (
     ControlRequest,
     HealthResponse,
     WorldInitResponse,
+    WorldUpdate,
 )
 from app.simulation.world import World
 
@@ -97,10 +98,17 @@ async def health() -> HealthResponse:
 async def world_init() -> WorldInitResponse:
     assert WORLD is not None
     async with WORLD._lock:
+        eco_state = WORLD.ecology.get_state()
         return WorldInitResponse(
             tick=WORLD.tick,
             map=[row[:] for row in WORLD.map_grid],
             agents=list(WORLD.agents.values()),
+            world_state=WorldUpdate(
+                season=eco_state.get("season"),
+                weather=eco_state.get("weather"),
+                grid_delta=None,
+                market_price=dict(WORLD.market_price),
+            ),
         )
 
 

@@ -56,6 +56,8 @@ class AgentSchema(BaseModel):
     father_id: int | None = None
     relationships: dict[int, float] = Field(default_factory=dict)
     last_decision_tick: int = 0
+    chat_bubble_text: str | None = None    # MICRO-B: نص الفقاعة أو None للإخفاء الفوري
+    chat_bubble_ticks_left: int = 0        # كم tick متبقي لإظهار الفقاعة (عند 0 يصير الـ text = None مرة واحدة في Delta)
 
 
 class AgentDelta(BaseModel):
@@ -70,6 +72,7 @@ class AgentDelta(BaseModel):
     age: int | None = None
     inventory: Inventory | None = None
     pregnancy_ticks: int | None = None
+    chat_bubble_text: str | None = None  # MICRO-B: إرسال None عند انتهاء الفقاعة لإخفائها فوراً في Frontend
 
 
 class EventItem(BaseModel):
@@ -84,6 +87,7 @@ class WorldInitResponse(BaseModel):
     tick: int
     map: list[list[Tile]]
     agents: list[AgentSchema]
+    world_state: WorldUpdate | None = None  # (الفصل + الطقس) عند الـ init للبدء مباشرة بالواجهة الصحيحة
 
 
 class ControlRequest(BaseModel):
@@ -97,7 +101,15 @@ class HealthResponse(BaseModel):
     agents_count: int
 
 
+class WorldUpdate(BaseModel):
+    season: str | None = None
+    weather: str | None = None
+    grid_delta: list[dict] | None = None  # اختياري: {"x":.. ,"y":.. ,"tile": Tile.model_dump()}
+    market_price: dict[str, float] | None = None  # اختياري: أسعار الموارد {"wheat": 1.0, ...}
+
+
 class SSEData(BaseModel):
     tick: int
     agents_delta: list[AgentDelta] = Field(default_factory=list)
     new_events: list[EventItem] = Field(default_factory=list)
+    world_update: WorldUpdate | None = None  # يُرسل فقط عند تغيير فصل/طقس (لا كل tick)
