@@ -25,6 +25,11 @@ class Settings(BaseSettings):
             v = v.replace("&channel_binding=require", "")
             v = v.replace("?channel_binding=require&", "?")
             v = v.replace("?channel_binding=require", "")
+        # asyncpg لا يدعم sslmode (نستخدم ssl في connect_args)
+        if v and "sslmode=require" in v:
+            v = v.replace("&sslmode=require", "")
+            v = v.replace("?sslmode=require&", "?")
+            v = v.replace("?sslmode=require", "")
         return v
 
 

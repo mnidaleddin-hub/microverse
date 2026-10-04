@@ -29,7 +29,7 @@ def get_engine() -> AsyncEngine:
                 "pool_timeout": 30,
                 "pool_recycle": 1800,
             })
-            kwargs["connect_args"] = {}
+            kwargs["connect_args"] = {"ssl": "require"}
         else:
             kwargs["connect_args"] = {"check_same_thread": False}
         _engine = create_async_engine(settings.DATABASE_URL, **kwargs)
