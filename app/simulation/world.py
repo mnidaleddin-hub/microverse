@@ -37,7 +37,7 @@ class World:
         self.sse_clients: set[Queue[str]] = set()
         self._current_events: list[EventItem] = []
         self._lock = asyncio.Lock()
-        self.ecology: EcologyManager = EcologyManager()  # Manager الفصول والطقس
+        self.ecology: EcologyManager = EcologyManager()
         # --- اقتصاد مصغر ---
         self.market_price: dict[str, float] = {"wheat": 1.0, "wood": 1.0, "stone": 1.0}
         self._last_market_price: dict[str, float] | None = None
@@ -55,7 +55,7 @@ class World:
                 elif r < 0.85:
                     t = 2
                 else:
-                    t = 3
+                    t = 3  # غابة / Forest — مأوى في العواصف
                 row.append(Tile(type=t, crop_growth=0.0, owner_id=None))
             grid.append(row)
         return grid
@@ -172,7 +172,10 @@ class World:
                         "payload_json": e.payload,
                     }
                     for e in events
-                    if e.type in ("spawn", "eat", "sleep", "plant", "harvest", "birth", "death")
+                    if e.type in (
+                        "spawn", "eat", "sleep", "wake", "plant", "harvest",
+                        "birth", "death", "pregnant", "capped", "chat",
+                    )
                 ]
                 if rows:
                     await session.execute(insert(EventsLogModel).values(rows))
@@ -262,7 +265,7 @@ class World:
             self.sse_clients.discard(q)
 
     def _recalc_market_price(self) -> bool:
-        """إعادة حساب أسعار الموارد بناءً على الإجمالي لدى جميع الكائنات. ترجع True إذا تغير السعر."""
+        """Realism: سعر القمح ينخفض فقط إذا كان المخزون الكلي > 200 وحدة."""
         total_wheat = 0
         total_wood = 0
         total_stone = 0
@@ -272,8 +275,8 @@ class World:
             total_stone += int(a.inventory.stone or 0)
 
         new_wheat = 1.0
-        if total_wheat > 100:
-            ratio = 100.0 / max(1.0, total_wheat)
+        if total_wheat > 200:
+            ratio = 200.0 / max(1.0, total_wheat)
             new_wheat = max(0.25, min(1.0, ratio))
         elif total_wheat < 30:
             new_wheat = min(2.5, 1.0 + (30 - total_wheat) * 0.03)
@@ -296,121 +299,152 @@ class World:
         return changed
 
     async def do_tick(self) -> None:
-        # --- [MICRO-QWEN] تحديث الفصول والطقس أولًا قبل أي منطق آخر
-        self.ecology.tick(self)
+        # 🔴 طبقة الحماية الأخيرة: أي خطأ غير متوقع يُطبع فقط ولا يسقط الحلقة
+        try:
+            # تحديث الفصول والطقس أولاً
+            self.ecology.tick(self)
 
-        self.tick += 1
+            self.tick += 1
 
-        tick_crops(self.map_grid)
+            tick_crops(self.map_grid)
 
-        # --- [MICRO-B] إدارة فقاعات الدردشة لكل agent: تنقيص ticks_left أو تعيين None عند الصفر
-        for agent in self.agents.values():
-            if agent.chat_bubble_ticks_left > 0:
-                agent.chat_bubble_ticks_left -= 1
-                if agent.chat_bubble_ticks_left <= 0 and agent.chat_bubble_text is not None:
-                    agent.chat_bubble_text = None  # لينتج delta مع chat_bubble_text = None للمرة الأولى فقط للمحافظة على delta صغير
+            if self.tick % 60 == 0:
+                print(f"[World] Tick {self.tick} | Agents: {len(self.agents)}/{settings.MAX_AGENTS} | Events Batched: {len(self._current_events)}")
 
-        snapshots: dict[int, dict] = {aid: snapshot_agent(a) for aid, a in self.agents.items()}
+            # إدارة فقاعات الدردشة لكل agent
+            for agent in self.agents.values():
+                if agent.chat_bubble_ticks_left > 0:
+                    agent.chat_bubble_ticks_left -= 1
+                    if agent.chat_bubble_ticks_left <= 0 and agent.chat_bubble_text is not None:
+                        agent.chat_bubble_text = None
 
-        all_events: list[EventItem] = []
-        agent_list = list(self.agents.values())
-        for agent in agent_list:
-            evs = run_agent_ai(agent, self.map_grid, self.grid_size, self.tick, self.agents)
-            all_events.extend(evs)
+            snapshots: dict[int, dict] = {aid: snapshot_agent(a) for aid, a in self.agents.items()}
 
-        # --- مزامنة next_agent_id بعد الولادات (لأن agent.py يستخدم max(all_agents)+1 أحياناً)
-        if self.agents:
-            max_id = max(self.agents.keys())
-            if max_id >= self.next_agent_id:
-                self.next_agent_id = max_id + 1
+            # ⭐ Realism: قراءة الطقس الحالي وتمريره إلى كل agent
+            current_weather = self.ecology.get_state().get("weather", "clear")
 
-        # --- [قيود حمراء QWEN #2: MAX_AGENTS = 50] إزالة أي أطفال تم إنتاجهم تجاوز الحد
-        if len(self.agents) > settings.MAX_AGENTS:
-            # نحافظ على الـ agents الأقدم (أقدم id)، نحذف الجديد تجاوز الحد
-            sorted_ids = sorted(self.agents.keys())
-            to_remove = sorted_ids[settings.MAX_AGENTS:]
-            for rid in to_remove:
-                a = self.agents.pop(rid, None)
-                if a is not None:
-                    all_events.append(EventItem(
-                        tick=self.tick, agent_id=a.id, type="capped",
-                        text=f"Agent {a.id} removed (MAX_AGENTS={settings.MAX_AGENTS} cap enforced)",
-                        payload={"name": a.name, "reason": "MAX_AGENTS_CAP"},
-                    ))
+            all_events: list[EventItem] = []
+            agent_list = list(self.agents.values())
+            for agent in agent_list:
+                try:
+                    evs = run_agent_ai(
+                        agent,
+                        self.map_grid,
+                        self.grid_size,
+                        self.tick,
+                        self.agents,
+                        weather=current_weather,
+                    )
+                    all_events.extend(evs)
+                except Exception as ai_exc:
+                    print(f"[tick_loop][ai] agent {getattr(agent, 'id', '?')} error: {ai_exc!r}", flush=True)
 
-        # تطبيق Batch Events المناطق: إضافة أحداث الـ tick الحالي لمجموعة التخزين المؤقتة للـ Persist
-        self._current_events.extend(all_events)
+            # مزامنة next_agent_id بعد الولادات
+            if self.agents:
+                max_id = max(self.agents.keys())
+                if max_id >= self.next_agent_id:
+                    self.next_agent_id = max_id + 1
 
-        deltas: list[AgentDelta] = []
-        for aid, agent in self.agents.items():
-            prev = snapshots.get(aid)
-            if prev is None:
-                continue
-            changed = False
-            d = AgentDelta(id=aid)
-            if prev["x"] != agent.x:
-                d.x = agent.x
-                changed = True
-            if prev["y"] != agent.y:
-                d.y = agent.y
-                changed = True
-            if abs(prev["hunger"] - agent.hunger) > 0.05:
-                d.hunger = round(agent.hunger, 2)
-                changed = True
-            if abs(prev["energy"] - agent.energy) > 0.05:
-                d.energy = round(agent.energy, 2)
-                changed = True
-            if abs(prev["hp"] - agent.hp) > 0.05:
-                d.hp = round(agent.hp, 2)
-                changed = True
-            if abs(prev["mood"] - agent.mood) > 0.05:
-                d.mood = round(agent.mood, 2)
-                changed = True
-            if prev["state"] != agent.state:
-                d.state = agent.state
-                changed = True
-            if prev["age"] != agent.age:
-                d.age = agent.age
-                changed = True
-            if prev["inventory_wheat"] != agent.inventory.wheat:
-                d.inventory = agent.inventory.model_copy()
-                changed = True
-            if prev["pregnancy_ticks"] != agent.pregnancy_ticks:
-                d.pregnancy_ticks = agent.pregnancy_ticks
-                changed = True
-            # MICRO-B: إرسال chat_bubble_text إذا تغير (بما في ذلك None للإخفاء الفوري)
-            if prev.get("chat_bubble_text", "__MISSING__") != agent.chat_bubble_text:
-                d.chat_bubble_text = agent.chat_bubble_text
-                changed = True
-            if changed:
-                deltas.append(d)
+            # --- MAX_AGENTS = 50 cap ---
+            if len(self.agents) > settings.MAX_AGENTS:
+                sorted_ids = sorted(self.agents.keys())
+                to_remove = sorted_ids[settings.MAX_AGENTS:]
+                for rid in to_remove:
+                    a = self.agents.pop(rid, None)
+                    if a is not None:
+                        all_events.append(EventItem(
+                            tick=self.tick, agent_id=a.id, type="capped",
+                            text=f"Agent {a.id} removed (MAX_AGENTS={settings.MAX_AGENTS} cap enforced)",
+                            payload={"name": a.name, "reason": "MAX_AGENTS_CAP"},
+                        ))
 
-        # --- حساب السوق كل 60 ticks + world_update إذا تغير شيء ---
-        eco_changed = self.ecology.has_changed()
-        market_changed = False
-        if self.tick % settings.SAVE_INTERVAL_TICKS == 0:
-            market_changed = self._recalc_market_price()
+            # --- Batch ---
+            self._current_events.extend(all_events)
 
-        world_update_obj: WorldUpdate | None = None
-        if eco_changed or market_changed:
-            eco_state = self.ecology.get_state()
-            world_update_obj = WorldUpdate(
-                season=eco_state.get("season") if eco_changed else None,
-                weather=eco_state.get("weather") if eco_changed else None,
-                grid_delta=None,
-                market_price=dict(self.market_price) if market_changed else None,
+            deltas: list[AgentDelta] = []
+            for aid, agent in self.agents.items():
+                prev = snapshots.get(aid)
+                if prev is None:
+                    continue
+                changed = False
+                d = AgentDelta(id=aid)
+                if prev["x"] != agent.x:
+                    d.x = agent.x
+                    changed = True
+                if prev["y"] != agent.y:
+                    d.y = agent.y
+                    changed = True
+                if abs(prev["hunger"] - agent.hunger) > 0.05:
+                    d.hunger = round(agent.hunger, 2)
+                    changed = True
+                if abs(prev["energy"] - agent.energy) > 0.05:
+                    d.energy = round(agent.energy, 2)
+                    changed = True
+                if abs(prev["hp"] - agent.hp) > 0.05:
+                    d.hp = round(agent.hp, 2)
+                    changed = True
+                if abs(prev["mood"] - agent.mood) > 0.05:
+                    d.mood = round(agent.mood, 2)
+                    changed = True
+                if prev["state"] != agent.state:
+                    d.state = agent.state
+                    changed = True
+                if prev["age"] != agent.age:
+                    d.age = agent.age
+                    changed = True
+                if prev["inventory_wheat"] != agent.inventory.wheat:
+                    d.inventory = agent.inventory.model_copy()
+                    changed = True
+                if prev["pregnancy_ticks"] != agent.pregnancy_ticks:
+                    d.pregnancy_ticks = agent.pregnancy_ticks
+                    changed = True
+                if prev.get("chat_bubble_text", "__MISSING__") != agent.chat_bubble_text:
+                    d.chat_bubble_text = agent.chat_bubble_text
+                    changed = True
+                if changed:
+                    deltas.append(d)
+
+            # --- سوق + world_update ---
+            eco_changed = self.ecology.has_changed()
+            market_changed = False
+            if self.tick % settings.SAVE_INTERVAL_TICKS == 0:
+                market_changed = self._recalc_market_price()
+
+            world_update_obj: WorldUpdate | None = None
+            if eco_changed or market_changed:
+                eco_state = self.ecology.get_state()
+                world_update_obj = WorldUpdate(
+                    season=eco_state.get("season") if eco_changed else None,
+                    weather=eco_state.get("weather") if eco_changed else None,
+                    grid_delta=None,
+                    market_price=dict(self.market_price) if market_changed else None,
+                )
+
+            sse_data = SSEData(
+                tick=self.tick,
+                agents_delta=deltas,
+                new_events=all_events,
+                world_update=world_update_obj,
             )
+            try:
+                await self._broadcast_sse(sse_data)
+            except Exception as bc_exc:
+                print(f"[tick_loop][broadcast] error: {bc_exc!r}", flush=True)
 
-        sse_data = SSEData(
-            tick=self.tick,
-            agents_delta=deltas,
-            new_events=all_events,
-            world_update=world_update_obj,  # None في الغالب، وobject فقط عند التغيير
-        )
-        await self._broadcast_sse(sse_data)
-
-        if self.tick % settings.SAVE_INTERVAL_TICKS == 0:
-            await self.save_world_state()
-            await self.persist_profiles()
-            await self.persist_events(self._current_events)
-            self._current_events.clear()
+            if self.tick % settings.SAVE_INTERVAL_TICKS == 0:
+                # 🔴 حماية منفصلة لكل عملية persist حتى لو فشلت واحدة لا يسقط الباقي
+                try:
+                    await self.save_world_state()
+                except Exception as sw_exc:
+                    print(f"[tick_loop][save_world_state] error: {sw_exc!r}", flush=True)
+                try:
+                    await self.persist_profiles()
+                except Exception as pp_exc:
+                    print(f"[tick_loop][persist_profiles] error: {pp_exc!r}", flush=True)
+                try:
+                    await self.persist_events(self._current_events)
+                except Exception as pe_exc:
+                    print(f"[tick_loop][persist_events] error: {pe_exc!r}", flush=True)
+                self._current_events.clear()
+        except Exception as tick_exc:
+            print(f"[tick_loop][do_tick] FATAL CAUGHT: {tick_exc!r}", flush=True)

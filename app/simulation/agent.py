@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import random
+import math
 from typing import TYPE_CHECKING
 
 from app.config import DIALOG_TEMPLATES, settings
@@ -39,7 +40,7 @@ def create_random_agent(
     while True:
         x = random.randint(0, grid_size - 1)
         y = random.randint(0, grid_size - 1)
-        if grid[y][x].type == 0:
+        if grid[y][x].type in (0, 3):  # أرض أو غابة
             break
 
     return AgentSchema(
@@ -48,7 +49,7 @@ def create_random_agent(
         x=x,
         y=y,
         gender=random_gender(),
-        age=random.randint(18, 40),
+        age=random.randint(3000, 8000),
         hp=100.0,
         hunger=float(random.randint(0, 30)),
         energy=float(random.randint(70, 100)),
@@ -71,15 +72,42 @@ def create_random_agent(
     )
 
 
-def _random_walk(agent: "AgentSchema", grid: list[list["Tile"]], grid_size: int) -> None:
+def _max_hp_for_age(age: int) -> float:
+    """الحد الأقصى لـ HP بناءً على العمر: يخفض 5% كل 10000 tick. الحد الأدنى 20%."""
+    steps = int(age // 10000)
+    ratio = max(0.2, 1.0 - 0.05 * steps)
+    return 100.0 * ratio
+
+
+def _random_walk(
+    agent: "AgentSchema", grid: list[list["Tile"]], grid_size: int, weather: str
+) -> None:
+    """حركة عشوائية — معدلة بناءً على الطقس: rain/snow = 30% أقل احتمالية للحركة, storm = لا تحرك."""
+    if weather == "storm":
+        # storm: ابحث عن أقرب غابة إذا وُجدت، وبخلاف ذلك ابقى مكانك (لا تحرك)
+        def forest_tile(x: int, y: int, tile: "Tile") -> bool:
+            return tile.type == 3
+
+        step = bfs_next_step(grid, (agent.x, agent.y), forest_tile, grid_size)
+        if step is not None:
+            agent.x, agent.y = step
+            agent.state = "walking"
+        return
+
     directions = [(0, -1), (1, 0), (0, 1), (-1, 0)]
     random.shuffle(directions)
-    for dx, dy in directions:
+    # rain/snow: 30% أقل حركة = نستخدم 2 directions فقط بدلاً من 4
+    if weather in ("rain", "snow"):
+        dirs = directions[:2]
+    else:
+        dirs = directions
+
+    for dx, dy in dirs:
         nx = agent.x + dx
         ny = agent.y + dy
         if 0 <= nx < grid_size and 0 <= ny < grid_size:
             tile = grid[ny][nx]
-            if tile.type != 1:
+            if tile.type != 1:  # لا شيء يدخل الماء باستثناء الموانئ
                 agent.x = nx
                 agent.y = ny
                 agent.state = "walking"
@@ -194,6 +222,7 @@ def run_agent_ai(
     grid_size: int,
     tick: int,
     all_agents: dict[int, "AgentSchema"],
+    weather: str = "clear",
 ) -> list["EventItem"]:
     from app.schemas import EventItem
 
@@ -201,20 +230,40 @@ def run_agent_ai(
 
     if agent.state == "dead":
         return events
+
+    # ⭐ Realism: زيادة العمر كل tick!
+    agent.age += 1
+    hp_cap = _max_hp_for_age(agent.age)
+    # clamp HP الحالي إلى hp_cap إذا تجاوزه
+    if agent.hp > hp_cap:
+        agent.hp = hp_cap
+
+    # ⭐ الموت الطبيعي: إذا العمر > 50000، احتمال يزداد تدريجياً
+    if agent.age > 50000:
+        age_above = agent.age - 50000
+        death_prob = min(0.005, age_above / 10_000_000)
+        if random.random() < death_prob:
+            agent.state = "dead"
+            agent.hp = 0.0
+            events.append(EventItem(
+                tick=tick, agent_id=agent.id, type="death",
+                text=f"Agent {agent.id} ({agent.name}) died of old age (age={agent.age})",
+                payload={"agent_id": agent.id, "name": agent.name, "cause": "old_age", "age": agent.age},
+            ))
+            return events
+
     if agent.hp <= 0:
         agent.state = "dead"
         events.append(EventItem(
             tick=tick, agent_id=agent.id, type="death",
-            text=f"Agent {agent.id} ({agent.name}) died",
+            text=f"Agent {agent.id} ({agent.name}) died (hp=0)",
             payload={"agent_id": agent.id, "name": agent.name},
         ))
         return events
 
     agent.last_decision_tick = tick
-    agent.age += 0
 
-    # 0. ⭐ أولاً: التفاعل الاجتماعي بناءً على الموقع الحالي (قبل أي حركة)
-    #    مهم جداً: لأن أي حركة لاحقة ستغيّر x,y وستفوت فرصة اللقاء
+    # 0. التفاعل الاجتماعي بناءً على الموقع الحالي (قبل أي حركة)
     events.extend(_social_interaction(agent, all_agents, tick))
 
     # 1. فحص الحمل والولادة
@@ -238,16 +287,31 @@ def run_agent_ai(
             agent.pregnancy_partner_id = None
         return events
 
-    # 2. فحص انخفاض الطاقة → نوم
+    # 2. ⭐ نظام النوم الحقيقي: إذا كان نائماً فلا يتحرك ولا يأكل حتى يعاود الطاقة 70
+    if agent.state == "sleeping":
+        agent.energy = min(100.0, agent.energy + 0.8)
+        agent.hunger = min(100.0, agent.hunger + 0.08)
+        if agent.energy >= 70.0:
+            # الاستيقاظ: جوع أعلى 5% كعقاب
+            agent.hunger = min(100.0, agent.hunger + 5.0)
+            agent.state = "idle"
+            events.append(EventItem(
+                tick=tick, agent_id=agent.id, type="wake",
+                text=f"Agent {agent.id} ({agent.name}) woke up",
+                payload={"agent_id": agent.id, "energy": agent.energy, "hunger": agent.hunger},
+            ))
+        else:
+            events.append(EventItem(
+                tick=tick, agent_id=agent.id, type="sleep",
+                text=f"Agent {agent.id} ({agent.name}) is sleeping (Zzz)",
+                payload={"agent_id": agent.id, "energy": agent.energy},
+            ))
+        return events
+
+    # انخفاض طفيف للطاقة إذا لم يكن نائماً
     if agent.energy < 20:
         agent.state = "sleeping"
-        agent.energy = min(100.0, agent.energy + 0.5)
-        agent.hunger = min(100.0, agent.hunger + 0.2)
-        events.append(EventItem(
-            tick=tick, agent_id=agent.id, type="sleep",
-            text=f"Agent {agent.id} ({agent.name}) is sleeping",
-            payload={"agent_id": agent.id, "energy": agent.energy},
-        ))
+        # النوم الحقيقي: لا يفعل شيئاً آخر في هذا الـ tick
         return events
 
     agent.hunger = min(100.0, agent.hunger + 0.3)
@@ -305,9 +369,9 @@ def run_agent_ai(
             ))
             return events
 
-    # 6. لا شيء آخر → تجول عشوائي
-    _random_walk(agent, grid, grid_size)
-    if agent.state != "walking":
+    # 6. لا شيء آخر → تجول عشوائي (يتأثر بالطقس: rain/snow/storm)
+    _random_walk(agent, grid, grid_size, weather)
+    if agent.state != "walking" and agent.state != "sleeping":
         agent.state = "idle"
 
     return events
