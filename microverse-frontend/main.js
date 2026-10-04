@@ -48,6 +48,7 @@ const app = new PIXI.Application({
     antialias: true,
 });
 document.getElementById('game-container').appendChild(app.view);
+app.view.style.zIndex = '1'; // ✅ ضمان الظهور فوق الخلفية
 
 // WorldContainer يحتوي على كل شيء (يلتف حوله Zoom/Pan/Shake)
 const worldContainer = new PIXI.Container();
