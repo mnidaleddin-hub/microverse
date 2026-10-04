@@ -45,13 +45,14 @@ function drawMap(gridData) {
             const cellGraphics = new PIXI.Graphics();
 
             // Draw base cell color
+            cellGraphics.lineStyle(1, 0x000000, 0.1);
             cellGraphics.beginFill(CELL_COLORS[cell.type] || 0xcccccc);
             cellGraphics.drawRect(x * CELL_SIZE, y * CELL_SIZE, CELL_SIZE, CELL_SIZE);
             cellGraphics.endFill();
 
             // Draw crop growth indicator
             if (cell.crop_growth > 0) {
-                const cropSize = CELL_SIZE * cell.crop_growth; // Scale crop size with growth
+                const cropSize = CELL_SIZE * (cell.crop_growth / 100); // Scale crop size with growth
                 const cropOffset = (CELL_SIZE - cropSize) / 2;
                 cellGraphics.beginFill(0xffff00); // Yellow for crop
                 cellGraphics.drawRect(
@@ -192,7 +193,7 @@ function setupSSE() {
             updateSidebar(currentTick, agentSprites.size);
         }
 
-        if (data.new_events) {
+        if (data.new_events && Array.isArray(data.new_events)) {
             data.new_events.forEach(event => addEventToLog(event));
         }
 
@@ -263,7 +264,8 @@ function addEventToLog(event) {
     eventLogElement.innerHTML = ''; // Clear current log
     eventLog.forEach(e => {
         const li = document.createElement('li');
-        li.textContent = `Tick ${e.tick}: ${e.text || e.event_type || 'event'}`; // Assuming event has tick and description
+        const text = e.text || e.event_type || JSON.stringify(e);
+        li.textContent = `[T${e.tick || '?'}] ${text}`; // Assuming event has tick and description
         eventLogElement.appendChild(li);
     });
 }
