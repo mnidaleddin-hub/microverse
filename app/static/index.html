@@ -1,0 +1,253 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Microverse - Phase 1</title>
+    <style>
+        * { box-sizing: border-box; margin: 0; padding: 0; }
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+            background: #0f172a;
+            color: #e2e8f0;
+            min-height: 100vh;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            padding: 2rem;
+        }
+        h1 {
+            font-size: 2.5rem;
+            background: linear-gradient(90deg, #60a5fa, #a78bfa, #f472b6);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            margin-bottom: 0.5rem;
+        }
+        .subtitle {
+            color: #94a3b8;
+            margin-bottom: 2rem;
+        }
+        .status-card {
+            background: #1e293b;
+            border-radius: 12px;
+            padding: 1.5rem 2rem;
+            min-width: 400px;
+            margin-bottom: 1.5rem;
+            border: 1px solid #334155;
+        }
+        .status-row {
+            display: flex;
+            justify-content: space-between;
+            padding: 0.5rem 0;
+            border-bottom: 1px solid #334155;
+        }
+        .status-row:last-child { border-bottom: none; }
+        .label { color: #94a3b8; }
+        .value { color: #60a5fa; font-weight: 600; }
+        .controls {
+            display: grid;
+            grid-template-columns: repeat(2, 1fr);
+            gap: 0.75rem;
+            margin-bottom: 1.5rem;
+            min-width: 400px;
+        }
+        button {
+            padding: 0.75rem 1rem;
+            border: none;
+            border-radius: 8px;
+            background: #3b82f6;
+            color: white;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+        button:hover { background: #2563eb; transform: translateY(-1px); }
+        button.secondary { background: #475569; }
+        button.secondary:hover { background: #334155; }
+        button.danger { background: #ef4444; }
+        button.danger:hover { background: #dc2626; }
+        .log-container {
+            background: #1e293b;
+            border-radius: 12px;
+            padding: 1rem 1.5rem;
+            min-width: 400px;
+            max-width: 700px;
+            max-height: 400px;
+            overflow-y: auto;
+            border: 1px solid #334155;
+            font-family: ui-monospace, "Cascadia Code", Consolas, monospace;
+            font-size: 0.85rem;
+        }
+        .log-title {
+            font-family: -apple-system, sans-serif;
+            color: #94a3b8;
+            margin-bottom: 0.75rem;
+            padding-bottom: 0.5rem;
+            border-bottom: 1px solid #334155;
+            position: sticky;
+            top: 0;
+            background: #1e293b;
+        }
+        .log-item {
+            padding: 0.3rem 0;
+            border-bottom: 1px dashed #33415533;
+            color: #cbd5e1;
+        }
+        .log-item:last-child { border-bottom: none; }
+        .tick-badge {
+            display: inline-block;
+            background: #334155;
+            color: #94a3b8;
+            padding: 1px 6px;
+            border-radius: 4px;
+            font-size: 0.75rem;
+            margin-right: 0.5rem;
+        }
+        .type-spawn { color: #4ade80; }
+        .type-eat { color: #fbbf24; }
+        .type-sleep { color: #a78bfa; }
+        .type-plant { color: #34d399; }
+        .type-harvest { color: #f97316; }
+        .type-move { color: #60a5fa; }
+        .type-death { color: #f87171; }
+        .type-birth { color: #f472b6; }
+        .connected {
+            display: inline-block;
+            width: 10px;
+            height: 10px;
+            border-radius: 50%;
+            background: #22c55e;
+            margin-right: 0.5rem;
+            animation: pulse 2s infinite;
+        }
+        .disconnected { background: #ef4444; animation: none; }
+        @keyframes pulse {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0.4; }
+        }
+    </style>
+</head>
+<body>
+    <h1>Microverse</h1>
+    <p class="subtitle">Phase 1 — Social Simulation Core</p>
+
+    <div class="status-card">
+        <div class="status-row">
+            <span class="label">Connection</span>
+            <span class="value"><span id="conn-dot" class="connected"></span><span id="conn-text">Connecting...</span></span>
+        </div>
+        <div class="status-row">
+            <span class="label">Tick</span>
+            <span class="value" id="tick-val">0</span>
+        </div>
+        <div class="status-row">
+            <span class="label">Agents</span>
+            <span class="value" id="agents-val">—</span>
+        </div>
+        <div class="status-row">
+            <span class="label">Paused</span>
+            <span class="value" id="paused-val">False</span>
+        </div>
+        <div class="status-row">
+            <span class="label">Speed</span>
+            <span class="value" id="speed-val">1.0x</span>
+        </div>
+    </div>
+
+    <div class="controls">
+        <button onclick="control('pause')">⏸ Pause</button>
+        <button onclick="control('resume')" class="secondary">▶ Resume</button>
+        <button onclick="control('set_speed', 0.1)">🐢 10x</button>
+        <button onclick="control('set_speed', 1.0)" class="secondary">⏱ 1x</button>
+        <button onclick="control('set_speed', 0.01)">⚡ 100x</button>
+        <button onclick="control('reset')" class="danger">🔄 Reset World</button>
+    </div>
+
+    <div class="log-container">
+        <div class="log-title">📜 Event Log (SSE Stream)</div>
+        <div id="log"></div>
+    </div>
+
+    <script>
+        let tick = 0;
+        const logEl = document.getElementById("log");
+
+        function addLog(item) {
+            const div = document.createElement("div");
+            div.className = "log-item";
+            const typeClass = `type-${item.type}`;
+            div.innerHTML = `<span class="tick-badge">T${item.tick}</span>[${item.agent_id ?? "—"}] <span class="${typeClass}">${item.type.toUpperCase()}</span>: ${item.text}`;
+            logEl.insertBefore(div, logEl.firstChild);
+            while (logEl.children.length > 200) logEl.removeChild(logEl.lastChild);
+        }
+
+        async function loadInit() {
+            try {
+                const r = await fetch("/api/world/init");
+                const data = await r.json();
+                tick = data.tick;
+                document.getElementById("tick-val").textContent = tick;
+                document.getElementById("agents-val").textContent = data.agents.length;
+                if (data.agents && data.agents.length) {
+                    const preview = data.agents.slice(0, 3);
+                    preview.forEach(a => {
+                        addLog({ tick: data.tick, agent_id: a.id, type: "spawn", text: `${a.name} @ (${a.x},${a.y}) — hunger=${Math.round(a.hunger)} energy=${Math.round(a.energy)}` });
+                    });
+                }
+            } catch (e) {
+                console.error(e);
+            }
+        }
+
+        function connectStream() {
+            const es = new EventSource("/api/world/stream");
+            const dot = document.getElementById("conn-dot");
+            const txt = document.getElementById("conn-text");
+
+            es.onopen = () => {
+                dot.className = "connected";
+                txt.textContent = "Streaming";
+            };
+            es.onerror = () => {
+                dot.className = "disconnected";
+                txt.textContent = "Reconnecting...";
+            };
+            es.onmessage = (ev) => {
+                try {
+                    const data = JSON.parse(ev.data);
+                    tick = data.tick;
+                    document.getElementById("tick-val").textContent = tick;
+                    if (data.agents_delta && data.agents_delta.length) {
+                        document.getElementById("agents-val").textContent = "live";
+                    }
+                    if (data.new_events) {
+                        data.new_events.forEach(addLog);
+                    }
+                } catch (e) {
+                    console.error("parse", e);
+                }
+            };
+        }
+
+        async function control(action, value) {
+            const body = { action };
+            if (value !== undefined) body.value = value;
+            const r = await fetch("/api/world/control", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify(body),
+            });
+            const d = await r.json();
+            if (d.ok) {
+                document.getElementById("paused-val").textContent = d.paused;
+                const speed = (1.0 / d.speed).toFixed(0);
+                document.getElementById("speed-val").textContent = `${speed}x`;
+                addLog({ tick: d.tick, agent_id: null, type: "move", text: `Control: ${action}${value !== undefined ? " = " + value : ""}` });
+            }
+        }
+
+        loadInit();
+        connectStream();
+    </script>
+</body>
+</html>
