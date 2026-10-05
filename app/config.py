@@ -120,4 +120,15 @@ ANIMAL_NAMES_POOL = {
 FRIENDLY_ANIMALS = ["cow", "sheep", "chicken", "pig", "horse", "dog", "cat", "duck", "goose", "goat", "camel", "donkey", "rabbit"]
 WILD_ANIMALS     = ["fox", "wolf", "bear", "elephant", "giraffe", "lion", "tiger"]
 
+TILE_BIOMES = {
+    0: {"name": "Plains",   "color": 0x7CB342, "description": "Green grass plains"},
+    1: {"name": "Water",    "color": 0x1565C0, "description": "Dark blue water"},
+    2: {"name": "Farmland", "color": 0x6D4C41, "description": "Brown farmed soil"},
+    3: {"name": "Forest",   "color": 0x2E7D32, "description": "Dark green forest with trees"},
+    4: {"name": "Desert",   "color": 0xFDD835, "description": "Yellow sand"},
+    5: {"name": "Snow",     "color": 0xE3F2FD, "description": "White-blue snow"},
+    6: {"name": "Swamp",    "color": 0x558B2F, "description": "Brownish-green swamp with mist"},
+}
+BIOME_COUNT = 7
+
 settings = Settings() 

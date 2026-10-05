@@ -27,9 +27,9 @@
 const _IS_LOCAL = (typeof location !== "undefined") && (location.hostname === "localhost" || location.hostname === "127.0.0.1");
 const BACKEND_URL = _IS_LOCAL ? "http://127.0.0.1:8000" : "https://microverse-backend.onrender.com";
 const GRID_SIZE = 40;
-const CELL_SIZE = 16;
-const MAP_WIDTH = GRID_SIZE * CELL_SIZE;   // 640
-const MAP_HEIGHT = GRID_SIZE * CELL_SIZE;  // 640
+const CELL_SIZE = 32;
+const MAP_WIDTH = GRID_SIZE * CELL_SIZE;   // 1280
+const MAP_HEIGHT = GRID_SIZE * CELL_SIZE;  // 1280
 const MAX_EVENT_LOG = 35;
 
 // Tick/cycle parameters
@@ -93,14 +93,19 @@ const eventLog = [];
 // حالة العالم التالية (يتم تحديثها من SSE field world_update أو محلياً)
 let currentSeason = 'spring';   // spring/summer/autumn/winter
 let currentWeather = 'clear';   // clear/rain/snow
+let currentDarkness = 0.0;      // 0..1 (نهار ↔ منتصف الليل) — محدث من DayNightManager
 
 // Color palette fixed (single definition)
 const CELL_COLORS = {
-    0: { base: 0x6aa83a, alt: 0x78b542 },  // grass
-    1: { base: 0x1976d2, alt: 0x1e88e5 },  // water
-    2: { base: 0x8d6e63, alt: 0x795548 },  // farmland
-    3: { base: 0x2e7d32, alt: 0x388e3c },  // forest
+    0: { base: 0x7CB342, alt: 0x8BC34A },  // Plains
+    1: { base: 0x1565C0, alt: 0x1976D2 },  // Water
+    2: { base: 0x6D4C41, alt: 0x795548 },  // Farmland
+    3: { base: 0x2E7D32, alt: 0x388E3C },  // Forest
+    4: { base: 0xFDD835, alt: 0xFFEE58 },  // Desert
+    5: { base: 0xE3F2FD, alt: 0xBBDEFB },  // Snow
+    6: { base: 0x558B2F, alt: 0x689F38 },  // Swamp
 };
+const BIOME_NAME = ['Plains','Water','Farmland','Forest','Desert','Snow','Swamp'];
 
 // Skin/hair palettes
 const SKIN_TONES = [0xffdbac, 0xf1c27d, 0xe0ac69, 0xc68642, 0x8d5524];
@@ -306,33 +311,44 @@ const SpriteFactory = (function () {
         const sprite = new PIXI.Container();
         sprite.interactive = true;
         sprite.buttonMode = true;
+        sprite.direction = 'down';       // up/down/left/right
+        sprite.deadCounter = 0;          // عدد التكات منذ دخول state dead
 
-        // ---- طبقات مرتبة من الأسفل للأعلى ----
+        // ---- طبقات مرتبة من الأسفل للأعلى (32x32 scale) ----
         // 1) Shadow (لا يتأثر بالـ Hop/Bounce)
         const shadow = new PIXI.Graphics();
-        shadow.beginFill(0x000000, 0.32);
-        shadow.drawEllipse(0, 8.5, 6, 2.3);
+        shadow.beginFill(0x000000, 0.35);
+        shadow.drawEllipse(0, 15, 12, 4.2);
         shadow.endFill();
         sprite.addChild(shadow); sprite.shadow = shadow;
 
+        // 1b) Lantern Glow (Additive — سطوع الفانوس ليلاً عند الزراعة)
+        const lanternGlow = new PIXI.Graphics();
+        lanternGlow.blendMode = PIXI.BLEND_MODES.ADD;
+        lanternGlow.beginFill(0xffd54f, 0.0);
+        lanternGlow.drawCircle(0, 0, 32);
+        lanternGlow.endFill();
+        lanternGlow.visible = false;
+        sprite.addChild(lanternGlow); sprite.lanternGlow = lanternGlow;
+
         // 2) Rings (Hover/Selection/Pregnancy) تحت Body
         const hoverRing = new PIXI.Graphics();
-        hoverRing.lineStyle(1.5, 0x00e5ff, 0.95);
-        hoverRing.drawCircle(0, 0, 12.5);
+        hoverRing.lineStyle(2, 0x00e5ff, 0.95);
+        hoverRing.drawCircle(0, 0, 22);
         hoverRing.visible = false;
         sprite.addChildAt(hoverRing, 0);
         sprite.hoverRing = hoverRing;
 
         const selRing = new PIXI.Graphics();
-        selRing.lineStyle(2.3, 0x00ff7a, 1);
-        selRing.drawCircle(0, 0, 14);
+        selRing.lineStyle(2.6, 0x00ff7a, 1);
+        selRing.drawCircle(0, 0, 24);
         selRing.visible = false;
         sprite.addChildAt(selRing, 0);
         sprite.selRing = selRing;
 
         const pregRing = new PIXI.Graphics();
-        pregRing.lineStyle(2, 0xffd54f, 0.9);
-        pregRing.drawCircle(0, 0, 12.5);
+        pregRing.lineStyle(2.3, 0xffd54f, 0.9);
+        pregRing.drawCircle(0, 0, 22);
         pregRing.visible = false;
         sprite.addChildAt(pregRing, 0);
         sprite.pregRing = pregRing;
@@ -340,6 +356,10 @@ const SpriteFactory = (function () {
         // 3) Bounce Container (تتحرك صعوداً عند Hop، وتتنفس عند السكون)
         const bounce = new PIXI.Container();
         sprite.addChild(bounce); sprite.bounce = bounce;
+
+        // Legs (ساقان منفصلتان للتأرجح في walk cycle)
+        const legs = new PIXI.Graphics();
+        bounce.addChild(legs); sprite.legs = legs;
 
         // Body + Arms
         const arms = new PIXI.Graphics();
@@ -355,31 +375,45 @@ const SpriteFactory = (function () {
         const eyes = new PIXI.Graphics();
         bounce.addChild(eyes); sprite.eyes = eyes;
 
+        // Tool (أداة — المعول عند الزراعة)
+        const tool = new PIXI.Graphics();
+        bounce.addChild(tool); sprite.tool = tool;
+
+        // Zzz floating text (للعناية النوم)
+        const zzz = new PIXI.Text('Z z z', {
+            fontSize: 11, fill: 0xffffff, fontWeight: 'bold',
+            stroke: 0x0a2540, strokeThickness: 2,
+        });
+        zzz.anchor.set(0.5, 0.5);
+        zzz.visible = false;
+        bounce.addChild(zzz); sprite.zzz = zzz;
+
         // State Icon (Emoji) فوق الرأس
-        const stateIcon = new PIXI.Text('', { fontSize: 12 });
+        const stateIcon = new PIXI.Text('', { fontSize: 14 });
         stateIcon.anchor.set(0.5, 1);
-        stateIcon.y = -17;
+        stateIcon.y = -26;
         bounce.addChild(stateIcon); sprite.stateIcon = stateIcon;
 
         // ChatBubble (أعلى من stateIcon)
         const cb = _buildChatBubble();
+        cb.y = -56;
         bounce.addChild(cb);
         sprite.chat = cb;
 
         // NameTag (اسم تحت الكائن + stroke أسود — لا يتأثر بالـ Hop)
         const nameText = new PIXI.Text('', {
-            fontSize: 9, fontWeight: 'bold',
+            fontSize: 10, fontWeight: 'bold',
             fill: 0xffffff,
-            stroke: 0x000000, strokeThickness: 2,
+            stroke: 0x000000, strokeThickness: 2.5,
         });
         nameText.anchor.set(0.5, 0);
-        nameText.y = 11;
+        nameText.y = 20;
         sprite.addChild(nameText); sprite.nameText = nameText;
 
         // ===== Events =====
         sprite.on('pointerover', () => {
             hoveredAgentId = initialData.id;
-            hoverRing.visible = true; sprite.scale.set(1.12);
+            hoverRing.visible = true; sprite.scale.set(1.08);
             console.log(`🖱️ [Hover] Agent #${initialData.id} "${initialData.name}"`);
         });
         sprite.on('pointerout', () => {
@@ -401,80 +435,242 @@ const SpriteFactory = (function () {
         const isMale = a.gender === 'male';
         const clothColor = isMale ? 0x2196f3 : 0xec407a;
         const clothShadow = isMale ? 0x1565c0 : 0xad1457;
+        const clothHilit  = isMale ? 0x64b5f6 : 0xf48fb1;
         const skinTone = SKIN_TONES[(a.id * 3) % SKIN_TONES.length];
         const hairColor = HAIR_COLORS[a.id % HAIR_COLORS.length];
+        const hairStyle = (a.id * 7 + (isMale ? 0 : 3)) % 6;
 
-        // جسم + ظل الجسم
+        // ===== ساقان =====
+        sprite.legs.clear();
+        sprite.legs.lineStyle(0);
+        sprite.legs.beginFill(clothShadow);
+        sprite.legs.drawRoundedRect(-4, 6, 3.4, 7, 1.1);
+        sprite.legs.drawRoundedRect(0.6, 6, 3.4, 7, 1.1);
+        sprite.legs.endFill();
+        // حذاء
+        sprite.legs.beginFill(0x263238);
+        sprite.legs.drawRoundedRect(-4.5, 12, 4.2, 2.3, 0.9);
+        sprite.legs.drawRoundedRect(0.3,  12, 4.2, 2.3, 0.9);
+        sprite.legs.endFill();
+
+        // ===== Body + ظل الجسم (Gradient-like طبقات متداخلة) =====
         sprite.body.clear();
+        // ظل خلف
+        sprite.body.beginFill(0x000000, 0.18);
+        sprite.body.drawRoundedRect(-6.6, 0.5, 13.2, 11.5, 3.5);
+        sprite.body.endFill();
+        // ملابس ظل
         sprite.body.beginFill(clothShadow);
-        sprite.body.drawEllipse(0, 3.2, 5.1, 6.6);
+        sprite.body.drawRoundedRect(-6.8, -0.6, 13.6, 10.6, 3.8);
         sprite.body.endFill();
+        // ملابس رئيسية
         sprite.body.beginFill(clothColor);
-        sprite.body.drawEllipse(0, 1, 5, 6.5);
+        sprite.body.drawRoundedRect(-6.5, -1.2, 13, 9.6, 3.6);
+        sprite.body.endFill();
+        // حافة علوية ملونة (turtleneck / collar)
+        sprite.body.beginFill(clothHilit);
+        sprite.body.drawRoundedRect(-6.5, -1.2, 13, 2.3, [2.8, 2.8, 0, 0]);
+        sprite.body.endFill();
+        // حزام
+        sprite.body.beginFill(0x424242);
+        sprite.body.drawRect(-6.5, 6.3, 13, 1.8);
+        sprite.body.endFill();
+        // مشبك حزام
+        sprite.body.beginFill(0xffd54f);
+        sprite.body.drawRect(-1, 6.3, 2, 1.8);
         sprite.body.endFill();
 
-        // ذراعان (بلون الجلد)
+        // ===== ذراعان (بلون الجلد + كم ملابس) =====
         sprite.arms.clear();
-        sprite.arms.lineStyle(1.3, skinTone);
-        sprite.arms.moveTo(-4.6, 0.1); sprite.arms.lineTo(-5.6, 3.3);
-        sprite.arms.moveTo(4.6, 0.1);  sprite.arms.lineTo(5.6, 3.3);
+        // كم اليدين من القماش
+        sprite.arms.beginFill(clothShadow);
+        sprite.arms.drawRoundedRect(-8.5, -0.6, 2.6, 7.2, 1);
+        sprite.arms.drawRoundedRect(5.9, -0.6, 2.6, 7.2, 1);
+        sprite.arms.endFill();
+        sprite.arms.beginFill(clothColor);
+        sprite.arms.drawRoundedRect(-8.2, -0.4, 2, 5.5, 1);
+        sprite.arms.drawRoundedRect(6.2, -0.4, 2, 5.5, 1);
+        sprite.arms.endFill();
+        // يدان (جلد مكشوف عند المعصمين)
+        sprite.arms.beginFill(skinTone);
+        sprite.arms.drawCircle(-7.2, 5.7, 1.5);
+        sprite.arms.drawCircle(7.2, 5.7, 1.5);
+        sprite.arms.endFill();
 
-        // رأس + خدود
+        // ===== رأس + خدود + أذنان =====
         sprite.head.clear();
+        // رقبة
         sprite.head.beginFill(skinTone);
-        sprite.head.drawCircle(0, -5, 3.9);
+        sprite.head.drawRect(-1.8, -6.6, 3.6, 2.6);
         sprite.head.endFill();
-        sprite.head.beginFill(0xffab91, 0.28);
-        sprite.head.drawCircle(-2.1, -4, 0.85);
-        sprite.head.drawCircle(2.1, -4, 0.85);
+        // رأس بيضاوي
+        sprite.head.beginFill(skinTone);
+        sprite.head.drawEllipse(0, -10.5, 5.6, 6.5);
         sprite.head.endFill();
+        // ظل خفيف تحت الفك
+        sprite.head.beginFill(0x000000, 0.08);
+        sprite.head.drawEllipse(0, -7.8, 5.2, 2.5);
+        sprite.head.endFill();
+        // خدود
+        sprite.head.beginFill(0xffab91, 0.36);
+        sprite.head.drawCircle(-3.1, -9.3, 1.1);
+        sprite.head.drawCircle(3.1, -9.3, 1.1);
+        sprite.head.endFill();
+        // أنف صغير
+        sprite.head.lineStyle(0.6, 0x8d5524, 0.55);
+        sprite.head.moveTo(0, -10.2); sprite.head.lineTo(0, -8.8); sprite.head.lineTo(0.7, -8.5);
+        // شفايف
+        sprite.head.lineStyle(0.6, 0xc2185b, 0.75);
+        sprite.head.moveTo(-1.5, -7.5);
+        sprite.head.quadraticCurveTo(0, -6.9, 1.5, -7.5);
 
-        // شعر (ذكور قصير، إناث طويل)
+        // ===== شعر — 6 ستايلات مختلفة بناءً على hairStyle =====
         sprite.hair.clear();
         sprite.hair.beginFill(hairColor);
-        if (isMale) {
-            sprite.hair.drawCircle(0, -7.3, 3.6); sprite.hair.endFill();
+        if (hairStyle === 0) {          // قصير مستدير
+            sprite.hair.drawEllipse(0, -13.6, 5.8, 4.6);
+            sprite.hair.drawRect(-5.8, -14.5, 11.6, 2.6);
+        } else if (hairStyle === 1) {   // مسطح علوى + قصة عصرية
+            sprite.hair.drawRect(-6.2, -15.8, 12.4, 3.5);
+            sprite.hair.drawCircle(-5.8, -13.4, 2);
+            sprite.hair.drawCircle(5.8, -13.4, 2);
+            sprite.hair.drawCircle(0, -17, 2.2);
+        } else if (hairStyle === 2) {   // mohawk / وسط مرتفع
+            sprite.hair.drawRect(-1.5, -17.5, 3, 4.5);
+            sprite.hair.drawCircle(0, -17.8, 1.8);
+            sprite.hair.drawEllipse(0, -13.5, 5.5, 3.5);
+        } else if (hairStyle === 3) {   // طويل مدرج للخلف
+            sprite.hair.drawEllipse(0, -13.8, 6, 5);
+            sprite.hair.drawRect(-6.5, -14.5, 13, 3);
+            sprite.hair.drawRect(-6.6, -12, 2.6, 8.5);
+            sprite.hair.drawRect(4, -12, 2.6, 8.5);
+        } else if (hairStyle === 4) {   // شعر طويل ذيل حصان
+            sprite.hair.drawEllipse(0, -13.8, 6, 5);
+            sprite.hair.drawRect(-6.2, -14.5, 12.4, 3);
+            sprite.hair.drawRoundedRect(-1.5, -16, 3, 13, 1.5);
+        } else {                        // curly afro
+            for (let k = 0; k < 13; k++) {
+                const ang = (k / 13) * Math.PI * 2;
+                sprite.hair.drawCircle(Math.cos(ang)*4, -13.5 + Math.sin(ang)*4, 2.2);
+            }
+            sprite.hair.drawEllipse(0, -13.6, 5.4, 5);
+        }
+        sprite.hair.endFill();
+        // غرة أمامية (لجميع الستايلات باستثناء mohawk)
+        if (hairStyle !== 2 && hairStyle !== 5) {
             sprite.hair.beginFill(hairColor);
-            sprite.hair.drawRect(-3.5, -9.1, 7, 2.6); sprite.hair.endFill();
-        } else {
-            sprite.hair.drawCircle(0, -7.1, 4.1); sprite.hair.endFill();
-            sprite.hair.beginFill(hairColor);
-            sprite.hair.drawRect(-4.3, -9.7, 8.6, 3.6);
-            sprite.hair.drawRect(-4.6, -7, 2.6, 6.2);
-            sprite.hair.drawRect(2, -7, 2.6, 6.2);
+            sprite.hair.drawEllipse(0, -15.3, 5.3, 2.2);
             sprite.hair.endFill();
         }
 
-        // عيون (مغلقة عند النوم أو الموت)
+        // ===== عيون =====
         sprite.eyes.clear();
-        if (a.state === 'sleeping' || a.state === 'dead') {
-            sprite.eyes.lineStyle(1, 0x000000);
-            sprite.eyes.moveTo(-2.3, -5.2); sprite.eyes.lineTo(-0.7, -5.2);
-            sprite.eyes.moveTo(0.7, -5.2);  sprite.eyes.lineTo(2.3, -5.2);
+        if (a.state === 'dead') {
+            // X عيون الموت
+            sprite.eyes.lineStyle(1.1, 0xd32f2f, 1);
+            sprite.eyes.moveTo(-3.5, -12.2); sprite.eyes.lineTo(-1.6, -10.4);
+            sprite.eyes.moveTo(-1.6, -12.2); sprite.eyes.lineTo(-3.5, -10.4);
+            sprite.eyes.moveTo(1.6, -12.2);  sprite.eyes.lineTo(3.5, -10.4);
+            sprite.eyes.moveTo(3.5, -12.2);  sprite.eyes.lineTo(1.6, -10.4);
+        } else if (a.state === 'sleeping') {
+            // عيون مغلقة بأقواس
+            sprite.eyes.lineStyle(1, 0x0f172a, 0.9);
+            sprite.eyes.moveTo(-3.8, -10.8);
+            sprite.eyes.quadraticCurveTo(-2.55, -11.6, -1.3, -10.8);
+            sprite.eyes.moveTo(1.3, -10.8);
+            sprite.eyes.quadraticCurveTo(2.55, -11.6, 3.8, -10.8);
+        } else if (a.state === 'eating') {
+            // عيون سعيدة (^ ^)
+            sprite.eyes.lineStyle(1, 0x0f172a, 0.95);
+            sprite.eyes.moveTo(-3.6, -11.1); sprite.eyes.lineTo(-2.5, -12.1); sprite.eyes.lineTo(-1.4, -11.1);
+            sprite.eyes.moveTo(1.4, -11.1);  sprite.eyes.lineTo(2.5, -12.1);  sprite.eyes.lineTo(3.6, -11.1);
         } else {
-            sprite.eyes.beginFill(0x000000);
-            sprite.eyes.drawCircle(-1.5, -5.25, 0.7);
-            sprite.eyes.drawCircle(1.5, -5.25, 0.7);
+            // عيون مفتوحة عادية + حدوة بيضاء
+            sprite.eyes.beginFill(0xffffff);
+            sprite.eyes.drawEllipse(-2.5, -11, 1.5, 1.9);
+            sprite.eyes.drawEllipse(2.5, -11, 1.5, 1.9);
             sprite.eyes.endFill();
-            sprite.eyes.beginFill(0xffffff, 0.9);
-            sprite.eyes.drawCircle(-1.2, -5.45, 0.25);
-            sprite.eyes.drawCircle(1.8, -5.45, 0.25);
+            // بؤبؤ (اللون بناءً على id)
+            const irisColor = [0x3e2723, 0x1565c0, 0x2e7d32, 0x6a1b9a, 0x00838f][a.id % 5];
+            sprite.eyes.beginFill(irisColor);
+            sprite.eyes.drawCircle(-2.5, -10.9, 0.95);
+            sprite.eyes.drawCircle(2.5, -10.9, 0.95);
+            sprite.eyes.endFill();
+            // حدوة داخلية
+            sprite.eyes.beginFill(0x000000);
+            sprite.eyes.drawCircle(-2.5, -10.9, 0.55);
+            sprite.eyes.drawCircle(2.5, -10.9, 0.55);
+            sprite.eyes.endFill();
+            // بريق عين أبيض صغير
+            sprite.eyes.beginFill(0xffffff, 0.95);
+            sprite.eyes.drawCircle(-2.15, -11.4, 0.28);
+            sprite.eyes.drawCircle(2.85, -11.4, 0.28);
             sprite.eyes.endFill();
         }
 
-        // أيقونة حالة (Emoji)
+        // ===== أداة المعول عند الزراعة (farming) =====
+        sprite.tool.clear();
+        const showTool = (a.state === 'farming');
+        if (showTool) {
+            // عود خشبي
+            sprite.tool.lineStyle(1, 0x4e342e, 0.6);
+            sprite.tool.beginFill(0x6d4c41);
+            sprite.tool.drawRoundedRect(7.2, -3, 1.4, 11, 0.5);
+            sprite.tool.endFill();
+            // رأس المعول (معدني)
+            sprite.tool.beginFill(0x90a4ae);
+            sprite.tool.moveTo(6.5, -5.5);
+            sprite.tool.lineTo(11, -4);
+            sprite.tool.lineTo(10.5, -1);
+            sprite.tool.lineTo(6.8, -2.5);
+            sprite.tool.closePath();
+            sprite.tool.endFill();
+            // حافة لامعة
+            sprite.tool.beginFill(0xeceff1);
+            sprite.tool.moveTo(6.7, -5.2);
+            sprite.tool.lineTo(10.5, -3.8);
+            sprite.tool.lineTo(10.3, -3.3);
+            sprite.tool.lineTo(6.9, -4.5);
+            sprite.tool.closePath();
+            sprite.tool.endFill();
+        }
+
+        // ===== أيقونة حالة (Emoji) =====
         const preg = !!(a.pregnant_ticks && a.pregnant_ticks > 0) || a.state === 'pregnant';
         if (a.state === 'dead') sprite.stateIcon.text = '💀';
         else if (preg) sprite.stateIcon.text = '🤰';
         else sprite.stateIcon.text = STATE_ICONS[a.state] || '';
 
-        // حلقة الحمل + التحديد
+        // ===== حلقة الحمل + التحديد =====
         sprite.pregRing.visible = preg;
         sprite.selRing.visible = (selectedAgentId === a.id);
 
-        // الموتى: تلوين رمادي + شفافية
-        if (a.state === 'dead') { sprite.alpha = 0.5; sprite.tint = 0xb5b5b5; }
-        else                    { sprite.alpha = 1;   sprite.tint = 0xffffff; }
+        // ===== الموتى: تلوين رمادي + شفافية =====
+        if (a.state === 'dead') {
+            sprite.alpha = Math.min(1, Math.max(0.18, sprite.alpha));
+            sprite.tint = 0xb0bec5;
+        } else {
+            sprite.alpha = 1;
+            sprite.tint = 0xffffff;
+        }
+
+        // ===== فانوس ليلاً (ضوء محلي) =====
+        const isDark = currentDarkness > 0.6;
+        const needsLight = showTool || a.state === 'building' || a.state === 'crafting';
+        if (isDark && needsLight) {
+            sprite.lanternGlow.visible = true;
+            const la = 0.28 + (currentDarkness - 0.6) * 0.8;
+            sprite.lanternGlow.clear();
+            sprite.lanternGlow.beginFill(0xffd54f, Math.min(0.7, la));
+            sprite.lanternGlow.drawCircle(0, 0, 42);
+            sprite.lanternGlow.endFill();
+            // هالة داخلية أشد سطوعاً
+            sprite.lanternGlow.beginFill(0xfff176, Math.min(0.9, la * 1.2));
+            sprite.lanternGlow.drawCircle(4, 4, 14);
+            sprite.lanternGlow.endFill();
+        } else {
+            sprite.lanternGlow.visible = false;
+        }
 
         // ===== MICRO-ADJUSTMENT B =====
         // تحديث ChatBubble فوراً بناءً على chat_bubble_text.
@@ -494,40 +690,103 @@ const SpriteFactory = (function () {
         const lerpFactor = 0.022 * delta;   // بطيء وسلس
         agentSprites.forEach((sprite, id) => {
             if (sprite.targetX === undefined) return;
-
+            const a = agentsCache.get(id);
             const prevX = sprite.x, prevY = sprite.y;
             sprite.x += (sprite.targetX - sprite.x) * lerpFactor;
             sprite.y += (sprite.targetY - sprite.y) * lerpFactor;
 
-            // هل الكائن يتحرك حالياً؟
-            const dx = Math.abs(sprite.targetX - sprite.x);
-            const dy = Math.abs(sprite.targetY - sprite.y);
-            const movedThisFrame = Math.hypot(sprite.x - prevX, sprite.y - prevY);
-            const isMoving = (dx > 0.2 || dy > 0.2) && movedThisFrame > 0.01;
+            // === Dead counter + hide after 300 ticks ===
+            if (a && a.state === 'dead') {
+                sprite.deadCounter = (sprite.deadCounter || 0) + (0.016 * delta);
+                if (sprite.deadCounter > 5) {   // ~300 ticks تقريباً
+                    sprite.visible = false;
+                    sprite.alpha = 0;
+                }
+            } else {
+                sprite.deadCounter = 0;
+                sprite.visible = true;
+            }
 
-            // 1) Hop Animation (قفز طفيف عند الحركة عبر sin)
+            // هل الكائن يتحرك حالياً؟
+            const rawDx = sprite.targetX - sprite.x;
+            const rawDy = sprite.targetY - sprite.y;
+            const dx = Math.abs(rawDx);
+            const dy = Math.abs(rawDy);
+            const movedThisFrame = Math.hypot(sprite.x - prevX, sprite.y - prevY);
+            const isMoving = (dx > 0.4 || dy > 0.4) && movedThisFrame > 0.02;
+
+            // === اتجاه الحركة (4-direction) ===
             if (isMoving) {
-                sprite._hopPhase = (sprite._hopPhase || 0) + 0.3 * delta;
-                const hopHeight = Math.abs(Math.sin(sprite._hopPhase)) * 2.9;
+                if (Math.abs(rawDx) >= Math.abs(rawDy)) sprite.direction = (rawDx > 0) ? 'right' : 'left';
+                else                                      sprite.direction = (rawDy > 0) ? 'down'  : 'up';
+            }
+            // mirror للاتجاه الأيسر (بدون إنشاء textures)
+            if (sprite.bounce) {
+                sprite.bounce.scale.x = (sprite.direction === 'left') ? -1 : 1;
+            }
+
+            // === 1) Hop + Walk Cycle (تأرجح الأرجل والأذرع sin) ===
+            if (isMoving) {
+                sprite._hopPhase = (sprite._hopPhase || 0) + 0.38 * delta;
+                const hopHeight = Math.abs(Math.sin(sprite._hopPhase)) * 3.2;
                 sprite.bounce.y = -hopHeight;
-                const squish = 1 - (hopHeight / 12);
+                const squish = 1 - (hopHeight / 18);
                 sprite.shadow.scale.set(squish, squish);
-                sprite.shadow.alpha = 0.32 * squish;
+                sprite.shadow.alpha = 0.35 * squish;
+
+                // swing الساقين والذراعين (أمام/خلف)
+                const swing = Math.sin(sprite._hopPhase * 2) * 0.9;
+                if (sprite.legs) sprite.legs.rotation = swing * 0.08;
+                if (sprite.arms) sprite.arms.rotation = -swing * 0.09;
             } else {
                 sprite._hopPhase = 0;
                 sprite.bounce.y += (0 - sprite.bounce.y) * 0.25 * delta;
                 sprite.shadow.scale.x += (1 - sprite.shadow.scale.x) * 0.25 * delta;
                 sprite.shadow.scale.y += (1 - sprite.shadow.scale.y) * 0.25 * delta;
-                sprite.shadow.alpha   += (0.32 - sprite.shadow.alpha) * 0.25 * delta;
+                sprite.shadow.alpha   += (0.35 - sprite.shadow.alpha) * 0.25 * delta;
+                if (sprite.legs) sprite.legs.rotation += (0 - sprite.legs.rotation) * 0.2 * delta;
+                if (sprite.arms) sprite.arms.rotation += (0 - sprite.arms.rotation) * 0.2 * delta;
             }
 
-            // 2) Breathing (تنفس طفيف عند السكون — scale 0.985..1.015)
-            sprite._breathPhase = (sprite._breathPhase || Math.random()*6.28) + 0.04 * delta;
-            if (!isMoving) {
-                const b = 1 + Math.sin(sprite._breathPhase) * 0.014;
-                sprite.bounce.scale.set(b, b + Math.sin(sprite._breathPhase) * 0.008);
+            // === 2) Farming: اهتزاز سريع لأعلى/لأسفل + دوران يد المعول ===
+            if (a && a.state === 'farming') {
+                sprite._farmPhase = (sprite._farmPhase || 0) + 0.5 * delta;
+                const farmBob = Math.abs(Math.sin(sprite._farmPhase)) * 1.6;
+                sprite.bounce.y -= farmBob;
+                if (sprite.tool) sprite.tool.rotation = Math.sin(sprite._farmPhase) * 0.55;
+            } else if (sprite.tool) {
+                sprite.tool.rotation += (0 - sprite.tool.rotation) * 0.2 * delta;
+            }
+
+            // === 3) Sleep: استلقاء جانبي بسيط + Zzz عائم تتلاشى ===
+            if (a && a.state === 'sleeping') {
+                const targetRot = (sprite.direction === 'left' ? -1 : 1) * 0.55;
+                sprite.bounce.rotation += (targetRot - sprite.bounce.rotation) * 0.08 * delta;
+                // زيادة الشفافية تدريجياً = عمق نوم أعمق
+                sprite.zzz.visible = true;
+                sprite._zzzPhase = (sprite._zzzPhase || Math.random() * 6.28) + 0.05 * delta;
+                const zp = sprite._zzzPhase;
+                sprite.zzz.y = -30 + Math.sin(zp) * 4;
+                sprite.zzz.x = Math.sin(zp * 0.7) * 6;
+                const az = (0.5 + 0.5 * Math.sin(zp));
+                sprite.zzz.alpha = 0.25 + az * 0.75;
+                sprite.zzz.scale.set(0.85 + az * 0.35, 0.85 + az * 0.35);
             } else {
-                sprite.bounce.scale.x += (1 - sprite.bounce.scale.x) * 0.2 * delta;
+                sprite.bounce.rotation += (0 - sprite.bounce.rotation) * 0.15 * delta;
+                sprite.zzz.visible = false;
+                sprite.zzz.alpha = 0;
+            }
+
+            // === 4) Breathing (تنفس طفيف عند السكون — scale 0.985..1.015)
+            //    (ملاحظة: لا نكتب bounce.scale.x مباشرة لأننا استخدمناه لـ mirror)
+            sprite._breathPhase = (sprite._breathPhase || Math.random() * 6.28) + 0.04 * delta;
+            if (!isMoving && !(a && a.state === 'sleeping')) {
+                const by = 1 + Math.sin(sprite._breathPhase) * 0.015;
+                const bx = (sprite.direction === 'left' ? -1 : 1) * (1 + Math.sin(sprite._breathPhase) * 0.008);
+                sprite.bounce.scale.set(bx, by);
+            } else if (!(a && a.state === 'sleeping')) {
+                const tx = (sprite.direction === 'left' ? -1 : 1);
+                sprite.bounce.scale.x += (tx - sprite.bounce.scale.x) * 0.2 * delta;
                 sprite.bounce.scale.y += (1 - sprite.bounce.scale.y) * 0.2 * delta;
             }
         });
@@ -623,6 +882,7 @@ const DayNightManager = (function () {
         // سطوع الليل — المنحنى صفر نهاراً و 1 ليلاً (أهدأ قليلاً عند منتصف النهار)
         // 0 = midnight, 0.5 = noon
         const darkness = 0.5 - Math.cos(dayProgress * Math.PI * 2) * 0.5; // 0..1 منحني جميل
+        currentDarkness = darkness;   // تصدير للـ SpriteFactory / God Mode
         const nightAlpha = 0.08 + Math.max(0, (darkness - 0.35)) * 1.25;   // تقريباً 0 عند 10 صباحاً
 
         // لون الـ overlay (برتقالي غامق عند الغروب، أزرق بارد ليلاً)
@@ -679,9 +939,10 @@ const WeatherManager = (function () {
     const PARTICLE_RAIN_COUNT = 480;
     const PARTICLE_SNOW_COUNT = 260;
     const PARTICLE_LEAF_COUNT = 220;
+    const PARTICLE_FIREFLY_COUNT = 300;  // Bloom additive في الغابات ليلاً (max 500 pool)
 
-    let pcRain = null, pcSnow = null, pcLeaves = null;
-    const allParticles = { rain: [], snow: [], leaves: [] };
+    let pcRain = null, pcSnow = null, pcLeaves = null, pcFireflies = null;
+    const allParticles = { rain: [], snow: [], leaves: [], fireflies: [] };
 
     // === إنشاء Texture واحدة بيضاء لكل نوع عبر mini offscreen canvas ===
     function _makeTexture(drawFn, w, h) {
@@ -707,6 +968,15 @@ const WeatherManager = (function () {
         ctx.ellipse(w/2, h/2, w/2 - 0.5, h/2 - 0.5, 0.5, 0, Math.PI * 2);
         ctx.fill();
     }, 7, 5);
+    const TEX_FIREFLY = _makeTexture((ctx, w, h) => {
+        // دائرة متدرجة بيضاء نقية -> Bloom ADD مع tint أصفر يعطي التوهج
+        const grad = ctx.createRadialGradient(w/2, h/2, 0, w/2, h/2, w/2);
+        grad.addColorStop(0, 'rgba(255,255,255,1)');
+        grad.addColorStop(0.5, 'rgba(255,255,255,0.65)');
+        grad.addColorStop(1, 'rgba(255,255,255,0)');
+        ctx.fillStyle = grad;
+        ctx.fillRect(0, 0, w, h);
+    }, 10, 10);
 
     function _ensureContainers() {
         if (!pcRain) {
@@ -767,6 +1037,32 @@ const WeatherManager = (function () {
                 pcLeaves.addChild(s);
             }
         }
+        // Fireflies (يراعات — توهج ADD للغابات ليلاً)
+        if (!pcFireflies) {
+            pcFireflies = new PIXI.ParticleContainer(PARTICLE_FIREFLY_COUNT, {
+                position: true, rotation: false, scale: false, uvs: false, alpha: true, tint: true
+            });
+            pcFireflies.blendMode = PIXI.BLEND_MODES.ADD;
+            weatherParticleLayer.addChild(pcFireflies);
+            pcFireflies.visible = false;
+            const tints = [0xfff59d, 0xffd54f, 0xffca28, 0xb2ff59, 0x76ff03];
+            for (let i = 0; i < PARTICLE_FIREFLY_COUNT; i++) {
+                const s = new PIXI.Sprite(TEX_FIREFLY);
+                s.tint = tints[Math.floor(Math.random() * tints.length)];
+                s.alpha = 0.5 + Math.random() * 0.5;
+                s.x = Math.random() * MAP_WIDTH;
+                s.y = Math.random() * MAP_HEIGHT;
+                s._vx = (Math.random() - 0.5) * 0.8;
+                s._vy = (Math.random() - 0.5) * 0.6;
+                s._phase = Math.random() * 6.28;
+                s._pref = {
+                    bx: 40 + Math.random() * (MAP_WIDTH - 80),
+                    by: 40 + Math.random() * (MAP_HEIGHT - 80),
+                };
+                allParticles.fireflies.push(s);
+                pcFireflies.addChild(s);
+            }
+        }
     }
 
     function applyWeather(weather, season) {
@@ -781,6 +1077,8 @@ const WeatherManager = (function () {
         // الأوراق المتساقطة تظهر دائماً في الخريف + طقس غائم أو صافي
         const showLeaves = (currentSeason === 'autumn');
         pcLeaves.visible = showLeaves;
+        // اليراعات: تُحسب كل إطار بناءً على currentDarkness (ليلى فقط، خريف/صيف/ربيع)
+        // (سنقوم بتحديثها في tickFrame أدناه بناءً على الظلام الفعلي)
 
         if (weather === 'clear') {
             if (currentSeason === 'spring') { wIcon.textContent = '🌱'; wText.textContent = 'Clear (Spring)'; }
@@ -796,6 +1094,30 @@ const WeatherManager = (function () {
     // تحديث موقع الجزيئات كل إطار (Ticker)
     function tickFrame(delta) {
         _ensureContainers();
+        // اليراعات (Bloom ADD) مرئية ليلاً إذا darkness > 0.65 ولم يكن الشتاء
+        if (pcFireflies) {
+            const nightOK = currentDarkness > 0.65 && currentSeason !== 'winter';
+            pcFireflies.visible = nightOK;
+            if (nightOK) {
+                allParticles.fireflies.forEach(s => {
+                    s._phase += 0.03 * delta;
+                    // تجوال عشوائي حول preferred area
+                    s._vx += ((Math.random() - 0.5) * 0.3 - (s.x - s._pref.bx) / MAP_WIDTH * 0.1) * delta;
+                    s._vy += ((Math.random() - 0.5) * 0.25 - (s.y - s._pref.by) / MAP_HEIGHT * 0.1) * delta;
+                    s._vx = Math.max(-1.3, Math.min(1.3, s._vx * 0.98));
+                    s._vy = Math.max(-1.1, Math.min(1.1, s._vy * 0.98));
+                    s.x += s._vx * delta;
+                    s.y += s._vy * delta;
+                    // لف حول الحواف
+                    if (s.x < 0) s.x = MAP_WIDTH - 1;
+                    if (s.x > MAP_WIDTH) s.x = 1;
+                    if (s.y < 0) s.y = MAP_HEIGHT - 1;
+                    if (s.y > MAP_HEIGHT) s.y = 1;
+                    // وميض طبيعي
+                    s.alpha = 0.35 + (0.5 + 0.5 * Math.sin(s._phase * 3 + s._vx * 7)) * 0.6;
+                });
+            }
+        }
         if (pcRain.visible) {
             allParticles.rain.forEach(s => {
                 s.x += s._vx * delta;
@@ -1030,15 +1352,18 @@ const StatsManager = (function () {
         const ctx = cvs.getContext('2d');
         const W = cvs.width, H = cvs.height;
         const cellW = W / GRID_SIZE, cellH = H / GRID_SIZE;
-        // تدرج ألوان الخريطة
+        // تدرج ألوان الخريطة المصغرة (7 biomes كاملة)
         for (let y = 0; y < GRID_SIZE; y++) {
             for (let x = 0; x < GRID_SIZE; x++) {
                 const c = cachedGrid[y][x];
                 const t = c.type;
-                if (t === 1) ctx.fillStyle = '#1976d2';
-                else if (t === 2) ctx.fillStyle = '#8d6e63';
-                else if (t === 3) ctx.fillStyle = '#2e7d32';
-                else ctx.fillStyle = ((x+y)%2===0) ? '#6aa83a' : '#78b542';
+                if (t === 1)      ctx.fillStyle = '#1565C0';   // Water
+                else if (t === 2) ctx.fillStyle = '#6D4C41';   // Farmland
+                else if (t === 3) ctx.fillStyle = '#2E7D32';   // Forest
+                else if (t === 4) ctx.fillStyle = '#FDD835';   // Desert
+                else if (t === 5) ctx.fillStyle = '#E3F2FD';   // Snow
+                else if (t === 6) ctx.fillStyle = '#558B2F';   // Swamp
+                else ctx.fillStyle = ((x+y)%2===0) ? '#7CB342' : '#8BC34A'; // Plains
                 ctx.fillRect(x * cellW, y * cellH, Math.ceil(cellW), Math.ceil(cellH));
                 // محاصيل جاهزة = نقطة صفراء
                 if (t === 2 && (c.crop_growth || 0) >= 95) {
@@ -1086,8 +1411,8 @@ const StatsManager = (function () {
         _minimapCounter++;
         // نضيف نقطة للـ charts كل 1 tick (لكن buffer 60 فقط)
         recordSnapshot(tick);
-        // نرسم Minimap كل 10 ticks
-        if (_minimapCounter >= 10) {
+        // نرسم Minimap كل 15 ticks (توفير أداء — Minimap 10-15)
+        if (_minimapCounter >= 15) {
             _minimapCounter = 0;
             drawMinimap();
         }
@@ -1145,23 +1470,21 @@ const ScreenEffects = (function () {
     function _drawVignette() {
         vignetteOverlay.clear();
         const w = app.screen.width, h = app.screen.height;
-        const r = Math.max(w, h) * 0.85;
-        const grad = vignetteOverlay.texture; // لا نستخدمها، نستخدم radial gradient يدوياً عبر دوائر
-        // طريقة بسيطة: دوائر متداخلة متدرجة الشفافية
-        for (let i = 20; i >= 1; i--) {
-            const t = i / 20;
-            vignetteOverlay.beginFill(0x000000, 0.22 * (1 - t));
-            vignetteOverlay.drawRoundedRect(
-                w/2 - r*t, h/2 - r*t, r*t*2, r*t*2, Math.max(6, 30*t)
-            );
+        const cx = w / 2, cy = h / 2;
+        const maxR = Math.hypot(cx, cy);
+        // دوائر حلقية مركزية متداخلة — رسمة واحدة فقط عند resize
+        const RINGS = 36;
+        for (let i = RINGS; i >= 1; i--) {
+            const t = i / RINGS;
+            const alpha = 0.46 * (1 - t);
+            vignetteOverlay.beginFill(0x000000, Math.min(0.68, alpha));
+            vignetteOverlay.drawCircle(cx, cy, maxR * t);
             vignetteOverlay.endFill();
         }
-        // طبقة هالة شفافة جداً مركزية
-        vignetteOverlay.beginFill(0x000000, 0.12);
-        vignetteOverlay.drawRect(0,0,w,h);
+        // طبقة خارجية خفيفة جداً لضمان انسياب الحواف
+        vignetteOverlay.beginFill(0x000000, 0.18);
+        vignetteOverlay.drawRect(0, 0, w, h);
         vignetteOverlay.endFill();
-        // ثقب مركزي ناقص الشفافية ليعطي الإحساس بعمق
-        // (نفذناها بدلاً من Canvas 2D Radial Gradient بسبب بساطة Pixi Graphics)
     }
 
     function shake(intensity, frames) {
@@ -1252,97 +1575,167 @@ function drawMapDetails(gridData) {
             const cx = x * CELL_SIZE + CELL_SIZE / 2;
             const cy = y * CELL_SIZE + CELL_SIZE / 2;
             if (cell.type === 3) {
-                // شجرة: جذع + 3 دوائر ورق + ظل
+                // شجرة: جذع سميك + 4-5 دوائر ورق + ظل
                 const t = new PIXI.Graphics();
-                t.beginFill(0x000000, 0.22);
-                t.drawEllipse(cx, cy + 4.5, 4.2, 1.6);
+                t.beginFill(0x000000, 0.25);
+                t.drawEllipse(cx, cy + 11, 12, 4.2);
                 t.endFill();
                 t.beginFill(0x5d4037);
-                t.drawRect(cx - 1.1, cy + 1.2, 2.2, 4);
+                t.drawRoundedRect(cx - 2.4, cy - 2, 4.8, 12, 1.2);
                 t.endFill();
-                t.beginFill(0x1b5e20); t.drawCircle(cx, cy - 1, 5); t.endFill();
-                t.beginFill(0x2e7d32); t.drawCircle(cx - 2.2, cy - 2.2, 3.2); t.endFill();
-                t.beginFill(0x388e3c); t.drawCircle(cx + 2.2, cy - 2.2, 3.2); t.endFill();
-                // rotation طفيف للرياح (نحفظه في كائن للـ ticker)
-                t.pivot.set(cx, cy + 3.5);
+                t.beginFill(0x1b5e20); t.drawCircle(cx, cy - 6, 12); t.endFill();
+                t.beginFill(0x2e7d32); t.drawCircle(cx - 5, cy - 9, 7.2); t.endFill();
+                t.beginFill(0x388e3c); t.drawCircle(cx + 5, cy - 9, 7.2); t.endFill();
+                t.beginFill(0x43a047, 0.72); t.drawCircle(cx + 0.5, cy - 13, 6); t.endFill();
+                // ثمار أو أزهار عشوائية
+                if ((x*13 + y*7) % 5 === 0) {
+                    const fruitTint = [0xd32f2f, 0xf9a825, 0xe91e63][(x + y) % 3];
+                    t.beginFill(fruitTint, 0.9);
+                    t.drawCircle(cx - 4, cy - 10, 1.6);
+                    t.drawCircle(cx + 3.5, cy - 7, 1.4);
+                    t.endFill();
+                }
+                // pivot لل sway حول قاعدة الجذع
+                t.pivot.set(cx, cy + 6);
                 t.x = 0; t.y = 0;
-                t._swayPhase = (x * 31 + y * 17) % 628 / 100;
+                t._swayPhase = (x * 61 + y * 37) % 628 / 100;
                 t._treeBaseX = 0; t._treeBaseY = 0;
                 mapDetailContainer.addChild(t);
+            }
+            if (cell.type === 6) {
+                // مستنقعات: ضباب خفيف بيضاوي شفاف فوق التايل
+                const mist = new PIXI.Graphics();
+                mist.blendMode = PIXI.BLEND_MODES.NORMAL;
+                mist.beginFill(0xcfd8dc, 0.28);
+                mist.drawEllipse(cx, cy - 3, CELL_SIZE * 0.6, 4.8);
+                mist.endFill();
+                mist.beginFill(0xb0bec5, 0.2);
+                mist.drawEllipse(cx - 6, cy - 7, 7, 2.5);
+                mist.endFill();
+                mist._mistPhase = (x * 19 + y * 29) % 628 / 100;
+                mapDetailContainer.addChild(mist);
+            }
+            if (cell.type === 4 && ((x + y) % 7 === 0)) {
+                // صحراء: كثبان صغيرة (cactus)
+                const cc = new PIXI.Graphics();
+                cc.beginFill(0x689f38);
+                cc.drawRoundedRect(cx - 1.5, cy - 4, 3, 10, 1.4);
+                cc.drawRoundedRect(cx - 5, cy - 1, 2.5, 4.5, 1);
+                cc.drawRoundedRect(cx + 2.5, cy - 3, 2.5, 5.5, 1);
+                cc.endFill();
+                // شوكات بيضاء
+                cc.lineStyle(0.4, 0xffffff, 0.6);
+                for (let sk = -3; sk <= 3; sk++) {
+                    cc.moveTo(cx - 1.5, cy - 3 + sk * 1.5); cc.lineTo(cx - 2.5, cy - 3 + sk * 1.5);
+                    cc.moveTo(cx + 1.5, cy - 3 + sk * 1.5); cc.lineTo(cx + 2.5, cy - 3 + sk * 1.5);
+                }
+                mapDetailContainer.addChild(cc);
+            }
+            if (cell.type === 5 && ((x * 5 + y * 3) % 9 === 0)) {
+                // ثلج: صنوبر أبيض صغير
+                const sn = new PIXI.Graphics();
+                sn.beginFill(0x37474f);
+                sn.drawRect(cx - 1, cy, 2, 5);
+                sn.endFill();
+                sn.beginFill(0xe3f2fd);
+                sn.moveTo(cx, cy - 11); sn.lineTo(cx - 6, cy - 2); sn.lineTo(cx + 6, cy - 2); sn.closePath();
+                sn.endFill();
+                sn.beginFill(0xbbdefb);
+                sn.moveTo(cx, cy - 7); sn.lineTo(cx - 5, cy + 0.5); sn.lineTo(cx + 5, cy + 0.5); sn.closePath();
+                sn.endFill();
+                sn._swayPhase = (x * 23 + y * 41) % 628 / 100;
+                sn.pivot.set(cx, cy + 3);
+                mapDetailContainer.addChild(sn);
             }
             if (cell.type === 2) {
                 const g = (cell.crop_growth || 0) / 100;
                 if (g <= 0) continue;
                 const cr = new PIXI.Graphics();
                 if (g < 0.2) {
-                    cr.beginFill(0x9ccc65); cr.drawCircle(cx, cy, 1.5); cr.endFill();
+                    cr.beginFill(0xaed581); cr.drawCircle(cx, cy, 2.5); cr.endFill();
                 } else if (g < 0.4) {
-                    cr.beginFill(0x7cb342);
-                    cr.drawRect(cx - 2, cy - 2, 1, 3.5);
-                    cr.drawRect(cx + 1, cy - 2, 1, 3.5);
+                    cr.beginFill(0x9ccc65);
+                    cr.drawRect(cx - 3, cy - 3, 1.5, 6);
+                    cr.drawRect(cx + 1.5, cy - 3, 1.5, 6);
                     cr.endFill();
                 } else if (g < 0.7) {
                     cr.beginFill(0x7cb342);
-                    cr.drawRect(cx - 2.8, cy - 3, 5.6, 6);
+                    cr.drawRect(cx - 5.6, cy - 5, 11.2, 10);
                     cr.endFill();
                     cr.beginFill(0x558b2f);
-                    cr.drawRect(cx - 2, cy - 5, 4, 3);
+                    cr.drawRect(cx - 4, cy - 9, 8, 5);
                     cr.endFill();
                 } else if (g < 0.95) {
                     cr.beginFill(0x689f38);
-                    cr.drawRect(cx - 3, cy - 3.2, 6, 6.5);
+                    cr.drawRect(cx - 6, cy - 5.5, 12, 11);
                     cr.endFill();
                     cr.beginFill(0x7cb342);
-                    cr.drawRect(cx - 3.6, cy - 5.5, 7.2, 3.5);
+                    cr.drawRect(cx - 7.2, cy - 10.5, 14.4, 6.5);
                     cr.endFill();
                 } else {
                     // ناضج ذهبي (جاهز للحصاد)
                     cr.beginFill(0xf9a825);
-                    cr.drawRect(cx - 3, cy - 3.2, 6, 6.5);
+                    cr.drawRect(cx - 6, cy - 5.5, 12, 11);
                     cr.endFill();
                     cr.beginFill(0xfbc02d);
-                    cr.drawRect(cx - 4.2, cy - 5.7, 8.4, 3.5);
+                    cr.drawRect(cx - 8.4, cy - 11, 16.8, 6.8);
                     cr.endFill();
-                    cr.beginFill(0xffe082, 0.55);
-                    cr.drawCircle(cx, cy - 4.5, 2.7);
+                    cr.beginFill(0xffe082, 0.6);
+                    cr.drawCircle(cx, cy - 9, 5);
+                    cr.endFill();
+                    // لمعان حصد (ADD)
+                    cr.beginFill(0xfff59d, 0.45);
+                    cr.drawCircle(cx, cy - 9, 3);
                     cr.endFill();
                 }
                 mapDetailContainer.addChild(cr);
             }
-            // طبقة مائية: دوائر بيضاء شفافة لموجات (تتراقص في ticker)
+            // طبقة مائية: 3 حطاطات تموج بيضاء شفافة (تتحرك sin في ticker)
             if (cell.type === 1) {
                 const wave = new PIXI.Graphics();
                 const gx = x * CELL_SIZE, gy = y * CELL_SIZE;
+                wave.beginFill(0xffffff, 0.16);
+                wave.drawRoundedRect(gx + 2, gy + 8, CELL_SIZE - 4, 4, 1.8);
+                wave.endFill();
                 wave.beginFill(0xffffff, 0.12);
-                wave.drawRoundedRect(gx + 1, gy + 4, CELL_SIZE - 2, 3, 1.2);
+                wave.drawRoundedRect(gx + 6, gy + 20, CELL_SIZE - 12, 2.5, 1);
                 wave.endFill();
                 wave.beginFill(0xffffff, 0.08);
-                wave.drawRoundedRect(gx + 3, gy + 10, CELL_SIZE - 6, 2, 1);
+                wave.drawRoundedRect(gx + 4, gy + 26, CELL_SIZE - 8, 1.8, 0.9);
                 wave.endFill();
                 mapDetailContainer.addChild(wave);
-                // index للرجوع إليه في التحديث
                 const wt = waterTilesState.find(w => w.x === x && w.y === y);
                 if (wt) wt.waveGfx = wave;
             }
         }
     }
-    console.log("🌲 [Map] Details (trees/crops/waves) redrawn.");
+    console.log("🌲 [Map] Details (trees/fog/cacti/snow/crops/waves) redrawn.");
 }
 
-// تحديث موجات الماء + اهتزاز الأشجار كل إطار (Ticker)
+// تحديث موجات الماء + اهتزاز الأشجار + ضباب المستنقعات كل إطار (Ticker)
 function updateEnvironmentPerFrame(delta, globalTime) {
-    // موجات الماء
+    // موجات الماء — إزاحة سينية + alpha متماوج
     waterTilesState.forEach(wt => {
         if (!wt.waveGfx) return;
-        const sw = Math.sin(globalTime + wt.offset) * 0.8;
+        const sw = Math.sin(globalTime * 0.7 + wt.offset) * 2.4;
         wt.waveGfx.x = sw;
+        wt.waveGfx.y = Math.cos(globalTime * 0.5 + wt.offset) * 0.9;
         wt.waveGfx.alpha = 0.55 + Math.sin(globalTime * 1.25 + wt.offset) * 0.45;
     });
-    // اهتزاز الأشجار ±0.05 rad حول قاعدة الجذع
+    // اهتزاز الأشجار والصنوبر ± 0.08 rad حول قاعدة الجذع
     mapDetailContainer.children.forEach(node => {
         if (node._swayPhase !== undefined) {
             node._swayPhase += 0.018 * delta;
-            node.rotation = Math.sin(node._swayPhase) * 0.05;
+            node.rotation = Math.sin(node._swayPhase) * 0.08;
+        }
+    });
+    // ضباب المستنقعات (mist) — حركة خفيفة سينية + alpha متنفس
+    mapDetailContainer.children.forEach(node => {
+        if (node._mistPhase !== undefined) {
+            node._mistPhase += 0.008 * delta;
+            node.x = Math.sin(node._mistPhase) * 2.5;
+            node.y = Math.cos(node._mistPhase * 0.6) * 1.2;
+            node.alpha = 0.7 + 0.3 * Math.sin(node._mistPhase * 1.3);
         }
     });
 }
