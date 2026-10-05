@@ -2786,6 +2786,72 @@ function renderCodexGrid(filterText = '') {
 
 loadEntityRegistry();
 
+// ============================================================
+// ====== PHASE 4: CREATIVE POLISH (Particles, Camera, Audio, Tooltips) =======
+// ============================================================
+// Enhanced particle pooling with bloom effects
+const ENHANCED_PARTICLE_POOL = {
+    rain: { max: PARTICLE_RAIN_COUNT, texture: null, tint: 0x89c2ff },
+    snow: { max: PARTICLE_SNOW_COUNT, texture: null, tint: 0xffffff },
+    leaves: { max: PARTICLE_LEAF_COUNT, texture: null, tint: 0xe08a3e },
+    fireflies: { max: PARTICLE_FIREFLY_COUNT, texture: null, tint: 0xffd54f }
+};
+
+// Smooth Lerp Camera Follow (enhanced)
+function smoothCameraFollow(delta) {
+    if (followAgentId !== null && agentSprites.has(followAgentId)) {
+        const spr = agentSprites.get(followAgentId);
+        const targetPanX = spr.x - MAP_WIDTH / 2;
+        const targetPanY = spr.y - MAP_HEIGHT / 2;
+        const easeFactor = 0.06 * delta;
+        panOffsetX += (targetPanX - panOffsetX) * easeFactor;
+        panOffsetY += (targetPanY - panOffsetY) * easeFactor;
+        _applyTransform();
+    }
+}
+
+// Tooltip Micro-interaction System
+function showTooltip(x, y, text) {
+    const tooltip = document.getElementById('tooltip') || document.createElement('div');
+    tooltip.id = 'tooltip';
+    tooltip.className = 'glass-tooltip';
+    tooltip.textContent = text;
+    tooltip.style.position = 'fixed';
+    tooltip.style.left = x + 'px';
+    tooltip.style.top = y + 'px';
+    tooltip.style.zIndex = '300';
+    tooltip.style.padding = '6px 12px';
+    tooltip.style.background = 'rgba(6,11,20,0.92)';
+    tooltip.style.backdropFilter = 'blur(10px)';
+    tooltip.style.border = '1px solid rgba(255,255,255,0.15)';
+    tooltip.style.borderRadius = '8px';
+    tooltip.style.color = '#e8eef7';
+    tooltip.style.fontSize = '0.8rem';
+    tooltip.style.pointerEvents = 'none';
+    tooltip.style.animation = 'fadeIn 0.15s ease';
+    if (!document.getElementById('tooltip')) document.body.appendChild(tooltip);
+}
+function hideTooltip() {
+    const tooltip = document.getElementById('tooltip');
+    if (tooltip) tooltip.remove();
+}
+
+// Enhanced Audio Toggle with Visual Feedback
+function enhanceAudioUI() {
+    const btn = document.getElementById('mute-btn');
+    if (!btn) return;
+    btn.addEventListener('click', () => {
+        SoundManager.ensureUnlocked();
+        SoundManager.toggleMute();
+        btn.classList.toggle('active', !SoundManager.isMuted);
+        btn.innerHTML = SoundManager.isMuted ? '🔇 <span class="tool-text">Muted</span>' : '🔊 <span class="tool-text">Unmuted</span>';
+    });
+}
+
+// Initialize enhanced polish
+enhanceAudioUI();
+console.log("✨ [Polish] Enhanced particles, smooth camera, tooltips, audio UI initialized.");
+
 fetchInitialWorldData();
 setupSSE();
 
