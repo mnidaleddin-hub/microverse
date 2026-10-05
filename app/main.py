@@ -13,6 +13,7 @@ from fastapi.responses import FileResponse, HTMLResponse, StreamingResponse
 from app.config import settings
 from app.database import create_tables, get_db
 from app.schemas import (
+    AdminEditAgentRequest,
     ControlRequest,
     HealthResponse,
     WorldInitResponse,
@@ -148,6 +149,7 @@ async def world_stream(request: Request) -> StreamingResponse:
 async def world_control(body: ControlRequest) -> dict[str, Any]:
     assert WORLD is not None
     action = body.action.lower()
+    result: dict[str, Any] = {"ok": True, "action": action, "tick": WORLD.tick, "paused": WORLD.paused, "speed": WORLD.tick_interval}
     async with WORLD._lock:
         if action == "pause":
             WORLD.pause()
@@ -162,6 +164,53 @@ async def world_control(body: ControlRequest) -> dict[str, Any]:
         elif action == "set_speed":
             if body.value is not None:
                 WORLD.set_speed(float(body.value))
+        elif action == "force_weather":
+            valid = {"clear", "rain", "snow"}
+            weather = body.payload if isinstance(body.payload, str) else (str(body.value) if body.value is not None else "")
+            weather = weather.lower()
+            if weather not in valid:
+                return {"ok": False, "error": f"invalid weather: {weather}, valid: {valid}"}
+            ok = WORLD.force_weather(weather)
+            result["weather"] = WORLD.ecology.weather
+            if not ok:
+                return {"ok": False, "error": "force_weather failed"}
+        elif action == "force_season":
+            valid = {"spring", "summer", "autumn", "winter"}
+            season = body.payload if isinstance(body.payload, str) else (str(body.value) if body.value is not None else "")
+            season = season.lower()
+            if season not in valid:
+                return {"ok": False, "error": f"invalid season: {season}, valid: {valid}"}
+            ok = WORLD.force_season(season)
+            result["season"] = WORLD.ecology.season
+            if not ok:
+                return {"ok": False, "error": "force_season failed"}
+        elif action == "spawn_animals":
+            count = int(body.value) if body.value is not None else 5
+            spawned = WORLD.spawn_animals(count)
+            result["spawned_count"] = len(spawned)
+            result["animals_count"] = len(WORLD.animals)
         else:
             return {"ok": False, "error": f"unknown action: {body.action}"}
-    return {"ok": True, "action": action, "tick": WORLD.tick, "paused": WORLD.paused, "speed": WORLD.tick_interval}
+    return result
+
+
+@app.post("/api/admin/edit_agent")
+async def admin_edit_agent(body: AdminEditAgentRequest) -> dict[str, Any]:
+    assert WORLD is not None
+    async with WORLD._lock:
+        delta = WORLD.edit_agent(body.agent_id, body.updates)
+        if delta is None:
+            agent = WORLD.agents.get(body.agent_id)
+            if agent is None:
+                return {"ok": False, "error": f"agent {body.agent_id} not found"}
+            return {"ok": True, "changed": False, "agent": agent.model_dump(mode="json")}
+        from app.schemas import SSEData, EventItem
+        sse = SSEData(tick=WORLD.tick, agents_delta=[delta], new_events=[
+            EventItem(tick=WORLD.tick, agent_id=body.agent_id, type="admin_edit",
+                      text=f"Admin edited agent #{body.agent_id}: {list(body.updates.keys())}",
+                      payload={"updates": list(body.updates.keys())})
+        ])
+        await WORLD._broadcast_sse(sse)
+        agent = WORLD.agents.get(body.agent_id)
+        return {"ok": True, "changed": True, "delta": delta.model_dump(mode="json"),
+                "agent": agent.model_dump(mode="json") if agent else None}

@@ -320,6 +320,82 @@ class World:
     def resume(self) -> None:
         self.paused = False
 
+    def edit_agent(self, agent_id: int, updates: dict) -> AgentDelta | None:
+        agent = self.agents.get(agent_id)
+        if agent is None:
+            return None
+        delta = AgentDelta(id=agent_id)
+        changed = False
+        for key, val in updates.items():
+            if not hasattr(agent, key):
+                continue
+            if key == "inventory":
+                try:
+                    if isinstance(val, dict):
+                        inv = agent.inventory.model_copy(update=val)
+                        setattr(agent, key, inv)
+                        delta.inventory = inv
+                        changed = True
+                except Exception:
+                    pass
+                continue
+            if key == "traits":
+                try:
+                    if isinstance(val, dict):
+                        tr = agent.traits.model_copy(update=val)
+                        setattr(agent, key, tr)
+                        changed = True
+                except Exception:
+                    pass
+                continue
+            prev = getattr(agent, key, None)
+            try:
+                setattr(agent, key, type(prev)(val) if prev is not None else val)
+            except Exception:
+                try:
+                    setattr(agent, key, val)
+                except Exception:
+                    continue
+            new_val = getattr(agent, key, None)
+            if hasattr(delta, key):
+                setattr(delta, key, new_val)
+            changed = True
+        return delta if changed else None
+
+    def force_weather(self, weather: str) -> bool:
+        valid = {"clear", "rain", "snow"}
+        if weather not in valid:
+            return False
+        self.ecology.weather = weather
+        self.ecology._weather_changed = True
+        return True
+
+    def force_season(self, season: str) -> bool:
+        valid = {"spring", "summer", "autumn", "winter"}
+        if season not in valid:
+            return False
+        self.ecology.season = season
+        self.ecology._season_changed = True
+        return True
+
+    def spawn_animals(self, count: int) -> list[AnimalSchema]:
+        from app.config import FRIENDLY_ANIMALS
+        import random as _r
+        spawned: list[AnimalSchema] = []
+        for _ in range(max(0, int(count))):
+            atype = _r.choice(FRIENDLY_ANIMALS)
+            a = create_random_animal(self.next_animal_id, atype, self.map_grid, self.grid_size)
+            self.animals[a.id] = a
+            self.next_animal_id += 1
+            spawned.append(a)
+            ev = EventItem(
+                tick=self.tick, agent_id=None, type="animal_spawn",
+                text=f"Animal {a.id} ({a.type}: {a.name}) spawned at ({a.x},{a.y})",
+                payload={"animal_id": a.id, "animal_type": a.type, "name": a.name, "x": a.x, "y": a.y},
+            )
+            self._current_events.append(ev)
+        return spawned
+
     def add_sse_client(self, q: "Queue[str]") -> None:
         self.sse_clients.add(q)
 

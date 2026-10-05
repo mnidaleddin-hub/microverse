@@ -212,6 +212,7 @@ class WorldInitResponse(BaseModel):
 class ControlRequest(BaseModel):
     action: str
     value: float | None = None
+    payload: Any | None = None
 
 
 class HealthResponse(BaseModel):
@@ -233,3 +234,8 @@ class SSEData(BaseModel):
     agents_delta: list[AgentDelta] = Field(default_factory=list)
     new_events: list[EventItem] = Field(default_factory=list)
     world_update: WorldUpdate | None = None
+
+
+class AdminEditAgentRequest(BaseModel):
+    agent_id: int
+    updates: dict[str, Any]

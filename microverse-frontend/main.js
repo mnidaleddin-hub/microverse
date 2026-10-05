@@ -1390,12 +1390,19 @@ function updateDashboardCards() {
     if (pregnantEl) pregnantEl.textContent = pregnant;
 
     let wheat = 0, wood = 0, stone = 0, money = 0;
+    let grain = 0, vegetable = 0, fruit = 0, industrial = 0, metal = 0, animal_product = 0;
     all.forEach(a => {
         const inv = a.inventory || {};
         wheat += (inv.wheat || 0);
         wood += (inv.wood || 0);
         stone += (inv.stone || 0);
         money += (a.money || 0);
+        grain += ((inv.grain || 0) + (inv.wheat || 0));
+        vegetable += (inv.vegetable || 0);
+        fruit += (inv.fruit || 0);
+        industrial += (inv.industrial || 0);
+        metal += (inv.metal || 0);
+        animal_product += (inv.animal_product || 0);
     });
     const wheatEl = document.getElementById('wheat-total');
     if (wheatEl) wheatEl.textContent = wheat;
@@ -1405,6 +1412,14 @@ function updateDashboardCards() {
     if (stoneEl) stoneEl.textContent = stone;
     const moneyEl = document.getElementById('money-total');
     if (moneyEl) moneyEl.textContent = money.toFixed(1);
+
+    // 6 بطاقات موارد جديدة
+    const gEl = document.getElementById('grain-total'); if (gEl) gEl.textContent = grain;
+    const vEl = document.getElementById('vegetable-total'); if (vEl) vEl.textContent = vegetable;
+    const fEl = document.getElementById('fruit-total'); if (fEl) fEl.textContent = fruit;
+    const iEl = document.getElementById('industrial-total'); if (iEl) iEl.textContent = industrial;
+    const mEl = document.getElementById('metal-total'); if (mEl) mEl.textContent = metal;
+    const aEl = document.getElementById('animal_product-total'); if (aEl) aEl.textContent = animal_product;
 
     const seasonEl = document.getElementById('season-val');
     if (seasonEl) {
@@ -1423,6 +1438,39 @@ function updateDashboardCards() {
         const demandFactor = aliveAgents > 0 ? Math.min(1.5, aliveAgents / 10) : 1.0;
         const price = (1.0 * supplyFactor * demandFactor).toFixed(2);
         wheatPriceEl.textContent = price;
+    }
+
+    // Top 5 Demographics
+    function renderTop5(ulId, arr, labelFn) {
+        const ul = document.getElementById(ulId);
+        if (!ul) return;
+        ul.innerHTML = '';
+        arr.slice(0, 5).forEach(a => {
+            const li = document.createElement('li');
+            li.innerHTML = labelFn(a);
+            ul.appendChild(li);
+        });
+    }
+    const aliveAgents = all.filter(a => a.state !== 'dead');
+    const topMoney = [...aliveAgents].sort((a,b) => (b.money||0) - (a.money||0));
+    renderTop5('demo-top-money', topMoney, a => `<span class="demo-rank">${a.name}</span> 💰 <strong>${(a.money||0).toFixed(1)}</strong>`);
+    const topHp = [...aliveAgents].sort((a,b) => (b.hp||0) - (a.hp||0));
+    renderTop5('demo-top-hp', topHp, a => `<span class="demo-rank">${a.name}</span> ❤️ <strong>${Math.round(a.hp||0)}%</strong>`);
+    const topInt = [...aliveAgents].sort((a,b) => ((b.traits||{}).intelligence||0.5) - ((a.traits||{}).intelligence||0.5));
+    renderTop5('demo-top-intelligence', topInt, a => `<span class="demo-rank">${a.name}</span> 🧠 <strong>${Math.round(((a.traits||{}).intelligence||0.5)*100)}%</strong>`);
+    const topCourage = [...aliveAgents].sort((a,b) => ((b.traits||{}).courage||0.5) - ((a.traits||{}).courage||0.5));
+    renderTop5('demo-top-courage', topCourage, a => `<span class="demo-rank">${a.name}</span> 🛡️ <strong>${Math.round(((a.traits||{}).courage||0.5)*100)}%</strong>`);
+    const topFert = [...aliveAgents].sort((a,b) => ((b.traits||{}).fertility||0.5) - ((a.traits||{}).fertility||0.5));
+    renderTop5('demo-top-fertility', topFert, a => `<span class="demo-rank">${a.name}</span> 👶 <strong>${Math.round(((a.traits||{}).fertility||0.5)*100)}%</strong>`);
+
+    // Animals count (God Mode tab)
+    const gacEl = document.getElementById('god-animals-count');
+    if (gacEl && typeof worldData !== 'undefined' && worldData && worldData.animals) {
+        gacEl.textContent = worldData.animals.length;
+    } else if (gacEl) {
+        // count from window cache if we stored it elsewhere
+        const ac = document.querySelectorAll('.animal-sprite').length || 0;
+        if (ac) gacEl.textContent = ac;
     }
 }
 
@@ -1456,7 +1504,11 @@ function addEventToLog(ev) {
 // ============================================================
 // ======= AGENT DETAILS POPUP ===============================
 // ============================================================
+let _editModeActive = false;
+let _currentDetailAgentId = null;
+
 function showAgentDetails(a) {
+    _currentDetailAgentId = a.id;
     const isMale = a.gender === 'male';
     const av = document.getElementById('detail-avatar');
     av.className = 'avatar-circle' + (isMale ? '' : ' female');
@@ -1489,11 +1541,25 @@ function showAgentDetails(a) {
     const moodNorm = ((a.mood ?? 0) + 100) / 2;
     sB('detail-mood', 'detail-mood-num', moodNorm, 100);
 
-    const tr = a.traits || {};
-    document.getElementById('trait-courage').style.width      = Math.round((tr.courage ?? 0.5) * 100) + '%';
-    document.getElementById('trait-intelligence').style.width = Math.round((tr.intelligence ?? 0.5) * 100) + '%';
-    document.getElementById('trait-fertility').style.width    = Math.round((tr.fertility ?? 0.5) * 100) + '%';
-    document.getElementById('trait-aggression').style.width   = Math.round((tr.aggression ?? 0.5) * 100) + '%';
+    // Money stat row
+    const mStatEl = document.getElementById('detail-money-stat');
+    if (mStatEl) mStatEl.textContent = a.money ?? 0;
+
+    // ====== Traits ديناميكية: Object.entries ======
+    const traitsGrid = document.getElementById('detail-traits');
+    if (traitsGrid) {
+        traitsGrid.innerHTML = '';
+        const tr = a.traits || {};
+        Object.entries(tr).forEach(([key, val]) => {
+            const vv = typeof val === 'number' ? val : 0.5;
+            const pct = Math.round(vv * 100);
+            const labelNice = key.charAt(0).toUpperCase() + key.slice(1).replace(/([a-z])([A-Z])/g, '$1 $2');
+            const div = document.createElement('div');
+            div.className = 'trait-item';
+            div.innerHTML = `<span>${labelNice}</span><div class="mini-bar"><div style="width:${pct}%"></div></div>`;
+            traitsGrid.appendChild(div);
+        });
+    }
 
     const inv = a.inventory || {};
     document.getElementById('detail-wheat').textContent = inv.wheat ?? 0;
@@ -1513,21 +1579,112 @@ function showAgentDetails(a) {
             return `<span style="color:${color};font-weight:600;">${n}</span>: ${num>0?'+':''}${Math.round(num)}`;
         }).join(' · ');
     }
+
+    // ====== Edit Mode: تعبئة حقول الإدخال بالقيم الحالية ======
+    const eHp = document.getElementById('edit-hp');
+    const eHunger = document.getElementById('edit-hunger');
+    const eMoney = document.getElementById('edit-money');
+    const eState = document.getElementById('edit-state');
+    if (eHp) eHp.value = Math.round(a.hp ?? 0);
+    if (eHunger) eHunger.value = Math.round(a.hunger ?? 0);
+    if (eMoney) eMoney.value = (a.money ?? 0).toFixed(2);
+    if (eState) eState.value = (a.state || 'idle');
+
+    if (_editModeActive) {
+        _applyEditModeVisuals(true);
+    }
+
     document.getElementById('agent-details-popup').style.display = 'block';
+}
+
+function _applyEditModeVisuals(active) {
+    const inputs = document.querySelectorAll('.edit-input');
+    const saveBtn = document.getElementById('edit-save-btn');
+    const toggleBtn = document.getElementById('edit-toggle-btn');
+    const stateBadge = document.getElementById('detail-state-badge');
+    const hpNum = document.getElementById('detail-hp-num');
+    const hungerNum = document.getElementById('detail-hunger-num');
+    const moneyNum = document.getElementById('detail-money-stat');
+
+    inputs.forEach(inp => { inp.style.display = active ? 'inline-block' : 'none'; });
+    if (saveBtn) saveBtn.style.display = active ? 'inline-flex' : 'none';
+    if (stateBadge) stateBadge.style.display = active ? 'none' : 'inline-block';
+    if (hpNum) hpNum.style.display = active ? 'none' : 'inline-block';
+    if (hungerNum) hungerNum.style.display = active ? 'none' : 'inline-block';
+    if (moneyNum) moneyNum.style.display = active ? 'none' : 'inline-block';
+    if (toggleBtn) {
+        toggleBtn.classList.toggle('active', active);
+        toggleBtn.innerHTML = active ? '✏️ Editing…' : '✏️';
+    }
+}
+
+async function _saveAgentEdits() {
+    if (_currentDetailAgentId == null) return;
+    const updates = {};
+    const eHp = document.getElementById('edit-hp');
+    const eHunger = document.getElementById('edit-hunger');
+    const eMoney = document.getElementById('edit-money');
+    const eState = document.getElementById('edit-state');
+    if (eHp && eHp.value !== '') updates.hp = Number(eHp.value);
+    if (eHunger && eHunger.value !== '') updates.hunger = Number(eHunger.value);
+    if (eMoney && eMoney.value !== '') updates.money = Number(eMoney.value);
+    if (eState && eState.value.trim() !== '') updates.state = eState.value.trim().toLowerCase();
+
+    if (Object.keys(updates).length === 0) {
+        console.log("💾 [Edit] No changes to save.");
+        return;
+    }
+    try {
+        const res = await fetch(`${BACKEND_URL}/api/admin/edit_agent`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ agent_id: _currentDetailAgentId, updates })
+        });
+        const data = await res.json();
+        if (!data.ok) {
+            alert("Save failed: " + (data.error || "unknown"));
+            return;
+        }
+        console.log("💾 [Edit] Saved:", data);
+        if (data.agent) {
+            agentsCache.set(data.agent.id, data.agent);
+            SpriteFactory.drawAgent(data.agent);
+            showAgentDetails(data.agent);
+        }
+        _editModeActive = false;
+        _applyEditModeVisuals(false);
+        updateDashboardCards();
+    } catch (err) {
+        console.error("❌ [Edit] Save failed:", err);
+        alert("Network error while saving.");
+    }
 }
 
 (function bindPopupUI() {
     const popup = document.getElementById('agent-details-popup');
     popup.querySelector('.close-button').addEventListener('click', () => {
         popup.style.display = 'none';
+        _editModeActive = false;
+        _applyEditModeVisuals(false);
         console.log("❌ [Popup] Closed via X.");
     });
     window.addEventListener('click', (e) => {
         if (e.target === popup) {
             popup.style.display = 'none';
+            _editModeActive = false;
+            _applyEditModeVisuals(false);
             console.log("❌ [Popup] Closed via outside click.");
         }
     });
+
+    const tog = document.getElementById('edit-toggle-btn');
+    if (tog) tog.addEventListener('click', () => {
+        _editModeActive = !_editModeActive;
+        _applyEditModeVisuals(_editModeActive);
+        console.log(`✏️ [Edit] Mode ${_editModeActive ? 'ENABLED' : 'DISABLED'}`);
+    });
+    const sv = document.getElementById('edit-save-btn');
+    if (sv) sv.addEventListener('click', _saveAgentEdits);
 })();
 
 // ============================================================
@@ -1540,19 +1697,28 @@ function setConnectionStatus(status, text) {
     txt.textContent = text;
 }
 
-async function sendControlCommand(action, value = null) {
-    console.log(`🎮 [Control] action="${action}"${value !== null ? `, value=${value}` : ''}`);
+async function sendControlCommand(action, value = null, payload = null) {
+    console.log(`🎮 [Control] action="${action}"${value !== null ? `, value=${value}` : ''}${payload !== null ? `, payload=${JSON.stringify(payload)}` : ''}`);
     SoundManager.ensureUnlocked(); SoundManager.play('click');
     try {
         const body = { action };
         if (value !== null) body.value = value;
+        if (payload !== null) body.payload = payload;
         const res = await fetch(`${BACKEND_URL}/api/world/control`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify(body)
         });
-        if (!res.ok) console.error("❌ [Control] Backend responded:", res.statusText);
-        else console.log("✅ [Control] Delivered.");
+        const data = await res.json().catch(() => ({}));
+        if (!res.ok) console.error("❌ [Control] Backend responded:", res.statusText, data);
+        else {
+            console.log("✅ [Control] Delivered.", data);
+            // Update animals count if spawn_animals returned it
+            if (data && data.animals_count != null) {
+                const gacEl = document.getElementById('god-animals-count');
+                if (gacEl) gacEl.textContent = data.animals_count;
+            }
+        }
 
         if (action === 'reset') {
             console.log("🔄 [Control] Reset requested. Flushing frontend state...");
@@ -1578,6 +1744,54 @@ async function sendControlCommand(action, value = null) {
         console.error("❌ [Control] Send failed:", err);
     }
 }
+
+// ============================================================
+// ===== TABS SWITCHING + GOD MODE BINDINGS ==================
+// ============================================================
+(function bindTabsAndGodMode() {
+    // Tabs switching
+    document.querySelectorAll('.tab-btn').forEach(btn => {
+        btn.addEventListener('click', () => {
+            const target = btn.dataset.tab;
+            document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
+            document.querySelectorAll('.tab-panel').forEach(p => p.classList.remove('active'));
+            btn.classList.add('active');
+            const tPanel = document.getElementById(target);
+            if (tPanel) tPanel.classList.add('active');
+            SoundManager.ensureUnlocked(); SoundManager.play('click');
+            console.log(`📑 [Tabs] Switched → ${target}`);
+        });
+    });
+
+    // God Mode — Weather
+    document.querySelectorAll('.weather-btn').forEach(btn => {
+        btn.addEventListener('click', () => {
+            const w = btn.dataset.weather;
+            console.log(`🌤️ [GodMode] Force weather → ${w}`);
+            sendControlCommand('force_weather', null, w);
+            WeatherManager.applyWeather(w, currentSeason);
+        });
+    });
+
+    // God Mode — Season
+    document.querySelectorAll('.season-btn').forEach(btn => {
+        btn.addEventListener('click', () => {
+            const s = btn.dataset.season;
+            console.log(`🌱 [GodMode] Force season → ${s}`);
+            sendControlCommand('force_season', null, s);
+            WeatherManager.applyWeather(currentWeather, s);
+        });
+    });
+
+    // God Mode — Spawn Animals
+    document.querySelectorAll('.spawn-btn').forEach(btn => {
+        btn.addEventListener('click', () => {
+            const c = parseInt(btn.dataset.count || '5', 10);
+            console.log(`🐄 [GodMode] Spawn ${c} animals`);
+            sendControlCommand('spawn_animals', c);
+        });
+    });
+})();
 
 // أزرار التحكم السفلية
 (function bindControlButtons() {
