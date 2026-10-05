@@ -103,6 +103,7 @@
       ]
     }
   },
+  "systems": ["social_ai", "economy", "conflict_politics", "culture", "environment", "gameplay", "visual", "analytics", "observer"],
   "total_entities": 240,
   "last_updated": "2026-10-05"
 }

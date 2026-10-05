@@ -2936,6 +2936,23 @@ function enhanceAudioUI() {
 enhanceAudioUI();
 console.log("✨ [Polish] Enhanced particles, smooth camera, tooltips, audio UI initialized.");
 
+// ============================================================
+// ====== PHASE 5-9: 9 SYSTEMS INTEGRATION (Frontend JS) =======
+// ============================================================
+import { updateSocialAI, initSocialAI } from '../src/systems/social_ai.js';
+import { updateEconomy, initEconomy } from '../src/systems/economy.js';
+import { updateConflictPolitics, initConflictPolitics } from '../src/systems/conflict_politics.js';
+import { updateCulture, initCulture } from '../src/systems/culture.js';
+import { updateEnvironment, initEnvironment } from '../src/systems/environment.js';
+import { updateGameplay, initGameplay } from '../src/systems/gameplay.js';
+import { updateVisual, initVisual } from '../src/systems/visual.js';
+import { updateAnalytics, initAnalytics } from '../src/systems/analytics.js';
+import { updateObserver, initObserver } from '../src/systems/observer.js';
+
+initSocialAI(); initEconomy(); initConflictPolitics(); initCulture();
+initEnvironment(); initGameplay(); initVisual(); initAnalytics(); initObserver();
+console.log("📦 [Systems] All 9 frontend systems initialized (Social, Economy, Conflict, Culture, Environment, Gameplay, Visual, Analytics, Observer).");
+
 fetchInitialWorldData();
 setupSSE();
 
