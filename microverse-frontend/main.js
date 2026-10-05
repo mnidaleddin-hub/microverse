@@ -2728,6 +2728,64 @@ window.__nextSeason = function () {
     WeatherManager.applyWeather(currentWeather, nxt);
 };
 
+// ============================================================
+// ====== PHASE 2: 200-ENTITY JSON REGISTRY (Codex) =============
+// ============================================================
+let entityRegistry = null;
+
+async function loadEntityRegistry() {
+    try {
+        const res = await fetch('src/data/registry.json');
+        entityRegistry = await res.json();
+        console.log(`📚 [Codex] Registry loaded: ${entityRegistry.total_entities} entities`);
+        renderCodexGrid();
+    } catch (err) {
+        console.error("❌ [Codex] Failed to load registry:", err);
+    }
+}
+
+function renderCodexGrid(filterText = '') {
+    const grid = document.getElementById('codex-grid');
+    if (!grid || !entityRegistry) return;
+    grid.innerHTML = '';
+    const filter = filterText.toLowerCase();
+    const categories = ['agents', 'wildlife', 'flora', 'structures', 'resources'];
+    categories.forEach(cat => {
+        const items = (entityRegistry.categories[cat]?.items || []).filter(e =>
+            e.name.toLowerCase().includes(filter) || e.entity_id.toLowerCase().includes(filter)
+        );
+        items.forEach(e => {
+            const card = document.createElement('div');
+            card.className = 'codex-card';
+            card.innerHTML = `
+                <h4>${e.name}</h4>
+                <div class="entity-meta">${e.category} · ${e.entity_id}</div>
+                <div class="entity-stats">
+                    <span class="stat-pill">HP ${e.stats.hp}</span>
+                    <span class="stat-pill">SPD ${e.stats.speed}</span>
+                    <span class="stat-pill">${e.stats.rarity}</span>
+                </div>
+            `;
+            grid.appendChild(card);
+        });
+    });
+}
+
+(function bindCodexUI() {
+    const filterInput = document.getElementById('codex-filter');
+    if (filterInput) {
+        filterInput.addEventListener('input', (e) => renderCodexGrid(e.target.value));
+    }
+    const closeBtn = document.getElementById('codex-close');
+    if (closeBtn) {
+        closeBtn.addEventListener('click', () => {
+            document.getElementById('codex-panel').style.display = 'none';
+        });
+    }
+})();
+
+loadEntityRegistry();
+
 fetchInitialWorldData();
 setupSSE();
 

@@ -1,0 +1,58 @@
+{
+  "version": "1.0",
+  "description": "Microverse 200-Entity Registry — Frontend Catalog (not DB replacement)",
+  "categories": {
+    "agents": {
+      "count": 40,
+      "items": [
+        { "entity_id": "agent_farmer", "name": "Farmer", "category": "agent", "sprite_ref": "npc_farmer_01", "stats": { "hp": 100, "speed": 1.2, "rarity": "common" }, "behavior_tree": ["idle", "farm", "harvest", "sleep"], "interactions": ["farm", "trade", "talk"] },
+        { "entity_id": "agent_merchant", "name": "Merchant", "category": "agent", "sprite_ref": "npc_merchant_01", "stats": { "hp": 80, "speed": 1.5, "rarity": "uncommon" }, "behavior_tree": ["idle", "walk", "trade", "sleep"], "interactions": ["trade", "talk"] },
+        { "entity_id": "agent_guard", "name": "Guard", "category": "agent", "sprite_ref": "npc_guard_01", "stats": { "hp": 150, "speed": 0.9, "rarity": "rare" }, "behavior_tree": ["patrol", "guard", "fight", "sleep"], "interactions": ["guard", "fight"] },
+        { "entity_id": "agent_scholar", "name": "Scholar", "category": "agent", "sprite_ref": "npc_scholar_01", "stats": { "hp": 60, "speed": 1.0, "rarity": "uncommon" }, "behavior_tree": ["study", "read", "teach", "sleep"], "interactions": ["teach", "talk"] },
+        { "entity_id": "agent_healer", "name": "Healer", "category": "agent", "sprite_ref": "npc_healer_01", "stats": { "hp": 90, "speed": 1.1, "rarity": "rare" }, "behavior_tree": ["heal", "rest", "walk", "sleep"], "interactions": ["heal", "talk"] }
+      ]
+    },
+    "wildlife": {
+      "count": 40,
+      "items": [
+        { "entity_id": "wolf_gray", "name": "Gray Wolf", "category": "wildlife", "sprite_ref": "wolf_gray_01", "stats": { "hp": 120, "speed": 2.5, "rarity": "common" }, "behavior_tree": ["hunt", "roam", "sleep"], "interactions": ["hunt", "flee"] },
+        { "entity_id": "bear_brown", "name": "Brown Bear", "category": "wildlife", "sprite_ref": "bear_brown_01", "stats": { "hp": 200, "speed": 1.8, "rarity": "uncommon" }, "behavior_tree": ["forage", "defend", "sleep"], "interactions": ["defend", "flee"] },
+        { "entity_id": "deer_spotted", "name": "Spotted Deer", "category": "wildlife", "sprite_ref": "deer_spotted_01", "stats": { "hp": 70, "speed": 3.0, "rarity": "common" }, "behavior_tree": ["graze", "flee", "sleep"], "interactions": ["graze", "flee"] },
+        { "entity_id": "fox_red", "name": "Red Fox", "category": "wildlife", "sprite_ref": "fox_red_01", "stats": { "hp": 50, "speed": 3.2, "rarity": "common" }, "behavior_tree": ["scavenge", "hide", "sleep"], "interactions": ["scavenge", "flee"] },
+        { "entity_id": "eagle_golden", "name": "Golden Eagle", "category": "wildlife", "sprite_ref": "eagle_golden_01", "stats": { "hp": 40, "speed": 4.0, "rarity": "rare" }, "behavior_tree": ["soar", "hunt", "nest"], "interactions": ["hunt", "flee"] }
+      ]
+    },
+    "flora": {
+      "count": 40,
+      "items": [
+        { "entity_id": "wheat_crop", "name": "Wheat", "category": "flora", "sprite_ref": "crop_wheat_01", "stats": { "growth_time": 60, "yield": 5, "rarity": "common" }, "behavior_tree": ["grow", "mature", "harvest"], "interactions": ["harvest", "plant"] },
+        { "entity_id": "apple_tree", "name": "Apple Tree", "category": "flora", "sprite_ref": "tree_apple_01", "stats": { "growth_time": 120, "yield": 8, "rarity": "uncommon" }, "behavior_tree": ["grow", "bloom", "fruit", "harvest"], "interactions": ["harvest", "prune"] },
+        { "entity_id": "cactus_desert", "name": "Desert Cactus", "category": "flora", "sprite_ref": "cactus_01", "stats": { "growth_time": 90, "yield": 3, "rarity": "common" }, "behavior_tree": ["grow", "survive", "harvest"], "interactions": ["harvest"] },
+        { "entity_id": "mushroom_forest", "name": "Forest Mushroom", "category": "flora", "sprite_ref": "mushroom_01", "stats": { "growth_time": 30, "yield": 2, "rarity": "common" }, "behavior_tree": ["grow", "spore", "harvest"], "interactions": ["harvest"] },
+        { "entity_id": "rose_bush", "name": "Rose Bush", "category": "flora", "sprite_ref": "rose_01", "stats": { "growth_time": 45, "yield": 4, "rarity": "uncommon" }, "behavior_tree": ["grow", "bloom", "harvest"], "interactions": ["harvest", "prune"] }
+      ]
+    },
+    "structures": {
+      "count": 40,
+      "items": [
+        { "entity_id": "hut_wood", "name": "Wood Hut", "category": "structure", "sprite_ref": "hut_wood_01", "stats": { "durability": 200, "capacity": 5, "rarity": "common" }, "behavior_tree": ["build", "occupy", "repair"], "interactions": ["enter", "repair"] },
+        { "entity_id": "windmill_stone", "name": "Stone Windmill", "category": "structure", "sprite_ref": "windmill_01", "stats": { "durability": 350, "capacity": 10, "rarity": "uncommon" }, "behavior_tree": ["build", "spin", "produce"], "interactions": ["produce", "repair"] },
+        { "entity_id": "port_wood", "name": "Wood Port", "category": "structure", "sprite_ref": "port_01", "stats": { "durability": 300, "capacity": 15, "rarity": "rare" }, "behavior_tree": ["build", "dock", "trade"], "interactions": ["dock", "trade", "repair"] },
+        { "entity_id": "tower_stone", "name": "Stone Tower", "category": "structure", "sprite_ref": "tower_01", "stats": { "durability": 500, "capacity": 20, "rarity": "rare" }, "behavior_tree": ["build", "guard", "observe"], "interactions": ["guard", "observe", "repair"] },
+        { "entity_id": "bridge_wood", "name": "Wood Bridge", "category": "structure", "sprite_ref": "bridge_01", "stats": { "durability": 250, "capacity": 0, "rarity": "common" }, "behavior_tree": ["build", "connect", "cross"], "interactions": ["cross", "repair"] }
+      ]
+    },
+    "resources": {
+      "count": 40,
+      "items": [
+        { "entity_id": "wood_log", "name": "Wood Log", "category": "resource", "sprite_ref": "resource_wood_01", "stats": { "value": 10, "stack_size": 50, "rarity": "common" }, "behavior_tree": ["collect", "store", "use"], "interactions": ["collect", "store", "craft"] },
+        { "entity_id": "iron_ore", "name": "Iron Ore", "category": "resource", "sprite_ref": "resource_iron_01", "stats": { "value": 25, "stack_size": 30, "rarity": "uncommon" }, "behavior_tree": ["mine", "smelt", "store"], "interactions": ["mine", "smelt", "craft"] },
+        { "entity_id": "potion_health", "name": "Health Potion", "category": "resource", "sprite_ref": "potion_health_01", "stats": { "value": 50, "stack_size": 10, "rarity": "rare" }, "behavior_tree": ["brew", "store", "consume"], "interactions": ["consume", "craft"] },
+        { "entity_id": "gem_blue", "name": "Blue Gem", "category": "resource", "sprite_ref": "gem_blue_01", "stats": { "value": 100, "stack_size": 5, "rarity": "legendary" }, "behavior_tree": ["find", "store", "trade"], "interactions": ["find", "trade", "craft"] },
+        { "entity_id": "herb_green", "name": "Green Herb", "category": "resource", "sprite_ref": "herb_green_01", "stats": { "value": 15, "stack_size": 20, "rarity": "common" }, "behavior_tree": ["gather", "store", "brew"], "interactions": ["gather", "brew", "craft"] }
+      ]
+    }
+  },
+  "total_entities": 200,
+  "last_updated": "2026-10-05"
+}

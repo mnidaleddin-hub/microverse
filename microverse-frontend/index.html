@@ -267,6 +267,19 @@
         </div>
     </div>
 
+    <!-- Codex / Encyclopedia Panel -->
+    <div id="codex-panel" class="glass-drawer" style="width:min(360px,85vw);z-index:90;" aria-label="Entity Codex">
+        <div class="codex-header">
+            <h3>📚 Codex</h3>
+            <button id="codex-close" class="glass-btn">✕</button>
+        </div>
+        <div id="codex-search" style="padding:0 12px 12px;">
+            <input type="text" id="codex-filter" placeholder="Search entities..." class="glass-btn" style="width:100%;padding:8px 12px;font-size:0.85rem;">
+        </div>
+        <div id="codex-grid" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(140px,1fr));gap:10px;padding:0 12px 12px;overflow-y:auto;max-height:calc(100vh - 200px);">
+        </div>
+    </div>
+
     <nav id="mobile-nav" class="mobile-nav" aria-label="Mobile navigation">
         <div class="mobile-nav-inner">
             <button class="nav-btn active" data-tab="overview" aria-label="Overview"><span class="nav-icon">📊</span><span class="nav-label">Overview</span></button>

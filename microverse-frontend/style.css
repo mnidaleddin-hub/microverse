@@ -1,6 +1,22 @@
 /* ============================================================
    STYLE.CSS — MICROVERSE v2 OVERHAUL (Dark Fantasy + Glassmorphism)
+   + Codex Panel Styles
    ============================================================ */
+
+/* Codex Panel */
+.codex-header { display: flex; justify-content: space-between; align-items: center; padding: 14px 18px; border-bottom: 1px solid var(--border-glass); background: linear-gradient(90deg, rgba(6,182,212,0.12), transparent 70%); }
+.codex-header h3 { font-size: 1.05rem; font-weight: 700; color: var(--text-main); }
+#codex-filter { background: var(--bg-glass); border: 1px solid var(--border-glass); border-radius: 8px; color: var(--text-main); padding: 8px 12px; font-size: 0.85rem; outline: none; transition: all 0.2s ease; }
+#codex-filter:focus { border-color: var(--accent-cyan); box-shadow: 0 0 10px rgba(6,182,212,0.3); }
+#codex-grid { scrollbar-width: thin; scrollbar-color: rgba(255,255,255,0.15) transparent; }
+#codex-grid::-webkit-scrollbar { width: 6px; }
+#codex-grid::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.15); border-radius: 3px; }
+.codex-card { background: var(--bg-glass); border: 1px solid var(--border-glass); border-radius: 10px; padding: 10px; transition: all 0.2s ease; backdrop-filter: blur(8px); }
+.codex-card:hover { transform: translateY(-2px); border-color: rgba(255,255,255,0.25); box-shadow: 0 8px 16px -6px rgba(0,0,0,0.5); }
+.codex-card h4 { font-size: 0.9rem; font-weight: 700; margin-bottom: 4px; color: var(--text-main); }
+.codex-card .entity-meta { font-size: 0.75rem; color: var(--text-muted); }
+.codex-card .entity-stats { display: flex; gap: 6px; margin-top: 6px; flex-wrap: wrap; }
+.codex-card .stat-pill { padding: 2px 6px; background: rgba(255,255,255,0.05); border-radius: 5px; font-size: 0.7rem; font-weight: 600; color: var(--text-secondary); border: 1px solid rgba(255,255,255,0.08); }
 
 * { box-sizing: border-box; margin: 0; padding: 0; }
 
