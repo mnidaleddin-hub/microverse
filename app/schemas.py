@@ -239,3 +239,20 @@ class SSEData(BaseModel):
 class AdminEditAgentRequest(BaseModel):
     agent_id: int
     updates: dict[str, Any]
+
+
+class EditAgentRequest(BaseModel):
+    agent_id: int
+    updates: dict[str, Any]
+
+
+class EditTileRequest(BaseModel):
+    x: int
+    y: int
+    tile_type: int = 0
+    crop_growth: float = 0.0
+
+
+class GodModeCommand(BaseModel):
+    action: str
+    value: Any = None

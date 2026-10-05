@@ -15,6 +15,9 @@ from app.database import create_tables, get_db
 from app.schemas import (
     AdminEditAgentRequest,
     ControlRequest,
+    EditAgentRequest,
+    EditTileRequest,
+    GodModeCommand,
     HealthResponse,
     WorldInitResponse,
     WorldUpdate,
@@ -189,6 +192,26 @@ async def world_control(body: ControlRequest) -> dict[str, Any]:
             spawned = WORLD.spawn_animals(count)
             result["spawned_count"] = len(spawned)
             result["animals_count"] = len(WORLD.animals)
+        elif action in {"kill_all", "kill_all_animals", "revive_all", "fill_all_needs", "give_money_all"}:
+            cmd = WORLD.execute_god_command(action, body.value if body.value is not None else body.payload)
+            result.update(cmd)
+            if not cmd.get("ok"):
+                return {"ok": False, "error": cmd.get("error", f"{action} failed")}
+            if action in {"kill_all", "revive_all", "fill_all_needs", "give_money_all"}:
+                from app.schemas import SSEData, AgentDelta, EventItem
+                deltas = []
+                events = []
+                for ag in WORLD.agents.values():
+                    d = AgentDelta(id=ag.id, hp=ag.hp, energy=ag.energy, hunger=ag.hunger,
+                                   mood=ag.mood, state=ag.state, inventory=ag.inventory)
+                    deltas.append(d)
+                if deltas:
+                    sse = SSEData(tick=WORLD.tick, agents_delta=deltas, new_events=[
+                        EventItem(tick=WORLD.tick, agent_id=None, type="god_command",
+                                  text=f"God command executed: {action}",
+                                  payload={"action": action, **cmd})
+                    ])
+                    await WORLD._broadcast_sse(sse)
         else:
             return {"ok": False, "error": f"unknown action: {body.action}"}
     return result
@@ -214,3 +237,87 @@ async def admin_edit_agent(body: AdminEditAgentRequest) -> dict[str, Any]:
         agent = WORLD.agents.get(body.agent_id)
         return {"ok": True, "changed": True, "delta": delta.model_dump(mode="json"),
                 "agent": agent.model_dump(mode="json") if agent else None}
+
+
+@app.patch("/api/admin/agent")
+async def patch_admin_agent(body: EditAgentRequest) -> dict[str, Any]:
+    assert WORLD is not None
+    async with WORLD._lock:
+        delta = WORLD.edit_agent(body.agent_id, body.updates)
+        if delta is None:
+            agent = WORLD.agents.get(body.agent_id)
+            if agent is None:
+                return {"ok": False, "error": f"agent {body.agent_id} not found"}
+            return {"ok": True, "changed": False, "agent": agent.model_dump(mode="json")}
+        from app.schemas import SSEData, EventItem
+        sse = SSEData(tick=WORLD.tick, agents_delta=[delta], new_events=[
+            EventItem(tick=WORLD.tick, agent_id=body.agent_id, type="admin_edit",
+                      text=f"Admin PATCH agent #{body.agent_id}: {list(body.updates.keys())}",
+                      payload={"updates": list(body.updates.keys())})
+        ])
+        await WORLD._broadcast_sse(sse)
+        agent = WORLD.agents.get(body.agent_id)
+        return {"ok": True, "changed": True, "delta": delta.model_dump(mode="json"),
+                "agent": agent.model_dump(mode="json") if agent else None}
+
+
+@app.patch("/api/admin/tile")
+async def patch_admin_tile(body: EditTileRequest) -> dict[str, Any]:
+    assert WORLD is not None
+    async with WORLD._lock:
+        tile_delta = WORLD.edit_tile(body.x, body.y, body.tile_type, body.crop_growth)
+        if tile_delta is None:
+            if body.x < 0 or body.y < 0 or body.x >= WORLD.grid_size or body.y >= WORLD.grid_size:
+                return {"ok": False, "error": f"tile ({body.x},{body.y}) out of bounds (grid_size={WORLD.grid_size})"}
+            return {"ok": True, "changed": False, "tile": WORLD.map_grid[body.y][body.x].model_dump(mode="json")}
+        from app.schemas import SSEData, WorldUpdate, EventItem
+        wu = WorldUpdate(grid_delta=[tile_delta])
+        sse = SSEData(tick=WORLD.tick, world_update=wu, new_events=[
+            EventItem(tick=WORLD.tick, agent_id=None, type="tile_edit",
+                      text=f"Tile ({body.x},{body.y}) changed to type={tile_delta['type']}",
+                      payload=tile_delta)
+        ])
+        await WORLD._broadcast_sse(sse)
+        return {"ok": True, "changed": True, "tile": tile_delta}
+
+
+@app.post("/api/admin/god_command")
+async def admin_god_command(body: GodModeCommand) -> dict[str, Any]:
+    assert WORLD is not None
+    async with WORLD._lock:
+        cmd = WORLD.execute_god_command(body.action, body.value)
+        if not cmd.get("ok"):
+            return {"ok": False, "error": cmd.get("error", "command failed")}
+        action = body.action
+        if action in {"kill_all", "revive_all", "fill_all_needs", "give_money_all"}:
+            from app.schemas import SSEData, AgentDelta, EventItem
+            deltas = []
+            for ag in WORLD.agents.values():
+                d = AgentDelta(id=ag.id, hp=ag.hp, energy=ag.energy, hunger=ag.hunger,
+                               mood=ag.mood, state=ag.state, inventory=ag.inventory)
+                deltas.append(d)
+            sse = SSEData(tick=WORLD.tick, agents_delta=deltas, new_events=[
+                EventItem(tick=WORLD.tick, agent_id=None, type="god_command",
+                          text=f"God command: {action}", payload=cmd)
+            ])
+            await WORLD._broadcast_sse(sse)
+        elif action in {"force_weather", "force_season"}:
+            from app.schemas import SSEData, WorldUpdate, EventItem
+            wu = WorldUpdate(
+                season=WORLD.ecology.season if action == "force_season" else None,
+                weather=WORLD.ecology.weather if action == "force_weather" else None,
+            )
+            sse = SSEData(tick=WORLD.tick, world_update=wu, new_events=[
+                EventItem(tick=WORLD.tick, agent_id=None, type="god_command",
+                          text=f"God command: {action}", payload=cmd)
+            ])
+            await WORLD._broadcast_sse(sse)
+        elif action == "spawn_animals":
+            from app.schemas import SSEData, EventItem
+            sse = SSEData(tick=WORLD.tick, new_events=[
+                EventItem(tick=WORLD.tick, agent_id=None, type="god_command",
+                          text=f"God command: {action} ({cmd.get('spawned_count',0)} spawned)",
+                          payload=cmd)
+            ])
+            await WORLD._broadcast_sse(sse)
+        return {"ok": True, **cmd}

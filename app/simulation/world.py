@@ -324,11 +324,20 @@ class World:
         agent = self.agents.get(agent_id)
         if agent is None:
             return None
+        is_dead = agent.state == "dead"
+        allowed_if_dead = {"revive", "hp", "state"}
         delta = AgentDelta(id=agent_id)
         changed = False
         for key, val in updates.items():
             if not hasattr(agent, key):
                 continue
+            if is_dead:
+                action = updates.get("__action") or ""
+                if action != "revive" and key not in allowed_if_dead:
+                    continue
+                if key == "state" and val != "idle" and val != "alive" and val != "dead":
+                    if action != "revive":
+                        continue
             if key == "inventory":
                 try:
                     if isinstance(val, dict):
@@ -360,7 +369,114 @@ class World:
             if hasattr(delta, key):
                 setattr(delta, key, new_val)
             changed = True
+        if is_dead and (updates.get("__action") == "revive" or updates.get("state") not in (None, "dead")):
+            if (updates.get("state") and updates["state"] != "dead") or (updates.get("hp", 0) > 0 and updates.get("__action") == "revive"):
+                if agent.state == "dead" and updates.get("state"):
+                    agent.state = updates["state"]
+                    delta.state = updates["state"]
+                    changed = True
+                if agent.hp <= 0:
+                    agent.hp = max(1.0, float(updates.get("hp", 50.0)))
+                    delta.hp = agent.hp
+                    changed = True
         return delta if changed else None
+
+    def edit_tile(self, x: int, y: int, tile_type: int, crop_growth: float = 0.0) -> dict | None:
+        if x < 0 or y < 0 or x >= self.grid_size or y >= self.grid_size:
+            return None
+        tile = self.map_grid[y][x]
+        old_type = tile.type
+        old_growth = tile.crop_growth
+        valid_types = {0, 1, 2, 3, 4, 5, 6}
+        if tile_type not in valid_types:
+            return None
+        tile.type = int(tile_type)
+        tile.crop_growth = max(0.0, min(1.0, float(crop_growth)))
+        if tile.type != 2:
+            tile.crop_type = None
+            tile.crop_growth = 0.0
+        changed = (old_type != tile.type) or (abs(old_growth - tile.crop_growth) > 1e-6)
+        if not changed:
+            return None
+        return {"x": x, "y": y, "type": tile.type, "crop_growth": tile.crop_growth,
+                "crop_type": tile.crop_type, "owner_id": tile.owner_id}
+
+    def execute_god_command(self, action: str, value: Any = None) -> dict:
+        action = (action or "").lower()
+        result: dict[str, Any] = {"action": action, "ok": True}
+        if action == "kill_all":
+            killed_ids: list[int] = []
+            for ag in self.agents.values():
+                if ag.state != "dead":
+                    ag.state = "dead"
+                    ag.hp = 0.0
+                    killed_ids.append(ag.id)
+                    ev = EventItem(
+                        tick=self.tick, agent_id=ag.id, type="death",
+                        text=f"Agent {ag.id} ({ag.name}) killed by God command",
+                        payload={"cause": "god_kill"},
+                    )
+                    self._current_events.append(ev)
+            result["killed_agents"] = len(killed_ids)
+            result["killed_ids"] = killed_ids
+        elif action == "kill_all_animals":
+            for an in self.animals.values():
+                if an.state != "dead":
+                    an.state = "dead"
+                    an.hp = 0.0
+            result["killed_animals"] = len(self.animals)
+        elif action == "revive_all":
+            revived = 0
+            for ag in self.agents.values():
+                if ag.state == "dead":
+                    ag.state = "idle"
+                    ag.hp = 80.0
+                    ag.energy = 100.0
+                    ag.hunger = 20.0
+                    revived += 1
+            result["revived_agents"] = revived
+        elif action == "force_weather":
+            weather = str(value or "clear").lower()
+            ok = self.force_weather(weather)
+            if not ok:
+                result["ok"] = False
+                result["error"] = "invalid weather"
+            result["weather"] = self.ecology.weather
+        elif action == "force_season":
+            season = str(value or "spring").lower()
+            ok = self.force_season(season)
+            if not ok:
+                result["ok"] = False
+                result["error"] = "invalid season"
+            result["season"] = self.ecology.season
+        elif action == "spawn_animals":
+            count = max(0, int(value or 5))
+            spawned = self.spawn_animals(count)
+            result["spawned_count"] = len(spawned)
+            result["total_animals"] = len(self.animals)
+        elif action == "fill_all_needs":
+            filled = 0
+            for ag in self.agents.values():
+                if ag.state != "dead":
+                    ag.hp = 100.0
+                    ag.energy = 100.0
+                    ag.hunger = 0.0
+                    ag.mood = 80.0
+                    filled += 1
+            result["filled_count"] = filled
+        elif action == "give_money_all":
+            amount = float(value or 100.0)
+            count = 0
+            for ag in self.agents.values():
+                if ag.state != "dead":
+                    ag.money = float(ag.money or 0.0) + amount
+                    count += 1
+            result["count"] = count
+            result["amount_per_agent"] = amount
+        else:
+            result["ok"] = False
+            result["error"] = f"unknown action: {action}"
+        return result
 
     def force_weather(self, weather: str) -> bool:
         valid = {"clear", "rain", "snow"}
