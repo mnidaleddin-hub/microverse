@@ -1719,12 +1719,96 @@ const ScreenEffects = (function () {
     };
 })();
 
-// [LEGACY ERADICATED] Old raw-color grid rendering (drawMapBase, drawMapDetails, normalizeGrid, waterTilesState, updateEnvironmentPerFrame) removed for Phase 4 engine overhaul
-// [NEW] Phase 4 Tilemap Engine: Placeholder for Phaser 3 / PixiJS Tilemap with pixel-art sprites
+// [ENGINE] Phase 4 Tilemap — HTML5 Canvas 2D with 50x50 grid, 32x32 tiles, pan/zoom, 10 agent circles
 function initTilemapEngine() {
-    console.log("🗺️ [Engine] Phase 4 Tilemap initialized — placeholder for pixel-art tilemap");
-    // Tilemap will load from registry.json (Phase 2) and render via PixiJS Tilemap
+    const canvas = document.createElement('canvas');
+    canvas.id = 'tilemap-canvas';
+    canvas.width = 1600; canvas.height = 1600;
+    canvas.style.display = 'block';
+    canvas.style.borderRadius = '8px';
+    const ctx = canvas.getContext('2d');
+    const container = document.getElementById('game-container');
+    if (container) container.appendChild(canvas);
+
+    const TILE_SIZE = 32;
+    const GRID_W = 50; const GRID_H = 50;
+    let offsetX = 0; let offsetY = 0; let scale = 1;
+    let isDragging = false; let dragStart = { x: 0, y: 0 };
+
+    // Tile colors (pixel-art style)
+    const TILE_COLORS = {
+        0: '#7cb342', 1: '#1565c0', 2: '#6d4c41', 3: '#2e7d32',
+        4: '#fdd835', 5: '#e3f2fd', 6: '#558b2f'
+    };
+
+    function drawGrid() {
+        ctx.clearRect(0, 0, canvas.width, canvas.height);
+        ctx.save();
+        ctx.translate(offsetX, offsetY);
+        ctx.scale(scale, scale);
+        for (let y = 0; y < GRID_H; y++) {
+            for (let x = 0; x < GRID_W; x++) {
+                const type = (x + y) % 7;
+                ctx.fillStyle = TILE_COLORS[type] || TILE_COLORS[0];
+                ctx.fillRect(x * TILE_SIZE, y * TILE_SIZE, TILE_SIZE, TILE_SIZE);
+                // Pixel border
+                ctx.strokeStyle = 'rgba(0,0,0,0.15)';
+                ctx.lineWidth = 0.5;
+                ctx.strokeRect(x * TILE_SIZE, y * TILE_SIZE, TILE_SIZE, TILE_SIZE);
+            }
+        }
+        // Render 10 agent circles with labels
+        for (let i = 0; i < 10; i++) {
+            const ax = (i * 5 + 2) * TILE_SIZE + TILE_SIZE / 2;
+            const ay = (i * 3 + 3) * TILE_SIZE + TILE_SIZE / 2;
+            ctx.beginPath();
+            ctx.arc(ax, ay, 10, 0, Math.PI * 2);
+            ctx.fillStyle = i % 2 === 0 ? '#3b82f6' : '#ec4899';
+            ctx.fill();
+            ctx.strokeStyle = '#fff';
+            ctx.lineWidth = 1.5;
+            ctx.stroke();
+            ctx.fillStyle = '#fff';
+            ctx.font = '10px sans-serif';
+            ctx.textAlign = 'center';
+            ctx.textBaseline = 'middle';
+            ctx.fillText(`A${i + 1}`, ax, ay);
+        }
+        ctx.restore();
+    }
+
+    // Pan (mouse drag)
+    canvas.addEventListener('mousedown', (e) => {
+        isDragging = true;
+        dragStart = { x: e.clientX, y: e.clientY };
+        canvas.style.cursor = 'grabbing';
+    });
+    window.addEventListener('mousemove', (e) => {
+        if (!isDragging) return;
+        offsetX += e.clientX - dragStart.x;
+        offsetY += e.clientY - dragStart.y;
+        dragStart = { x: e.clientX, y: e.clientY };
+        drawGrid();
+    });
+    window.addEventListener('mouseup', () => {
+        isDragging = false;
+        canvas.style.cursor = 'grab';
+    });
+
+    // Zoom (scroll wheel)
+    canvas.addEventListener('wheel', (e) => {
+        e.preventDefault();
+        const factor = e.deltaY < 0 ? 1.1 : 0.9;
+        scale = Math.max(0.5, Math.min(3, scale * factor));
+        drawGrid();
+    }, { passive: false });
+
+    drawGrid();
+    console.log("🗺️ [Engine] Phase 4 Tilemap: 50x50 grid, 32px tiles, pan/zoom, 10 agents rendered.");
 }
+
+// Initialize tilemap on boot
+initTilemapEngine();
 
 // ============================================================
 // ===== DASHBOARD UI UPDATE + EVENT LOG (Colored) ==========
