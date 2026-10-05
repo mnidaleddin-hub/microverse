@@ -32,7 +32,8 @@
     - [x] Health endpoint (200 OK + status:alive)
     - [x] SSE stream (text/event-stream + live ticks)
     - [x] World init (40x40 grid + 15 agents)
-- [x] و. Commit & Push النهائي للمرحلة 2 (TBD SHA)
+- [x] و. Commit & Push النهائي للمرحلة 2 (SHA: 249a4d0)
+  - URL: https://github.com/mnidaleddin-hub/microverse/commit/249a4d0
 
 ## 🐛 سجل المشاكل والحلول 
 - تم إصلاح `ImportError` لـ `DIALOG_TEMPLATES` في `app/config.py`.
