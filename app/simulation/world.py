@@ -5,10 +5,11 @@ import json
 import random
 from typing import TYPE_CHECKING
 
-from app.config import settings
+from app.config import FRIENDLY_ANIMALS, settings
 from app.schemas import (
     AgentDelta,
     AgentSchema,
+    AnimalSchema,
     EventItem,
     Inventory,
     SSEData,
@@ -17,6 +18,7 @@ from app.schemas import (
     WorldUpdate,
 )
 from app.simulation.agent import create_random_agent, run_agent_ai, snapshot_agent
+from app.simulation.animal_ai import create_random_animal, run_animal_ai
 from app.simulation.ecology import EcologyManager
 from app.simulation.farming import tick_crops
 
@@ -33,13 +35,14 @@ class World:
         self.paused: bool = False
         self.map_grid: list[list[Tile]] = []
         self.agents: dict[int, AgentSchema] = {}
+        self.animals: dict[int, AnimalSchema] = {}
         self.next_agent_id: int = 1
+        self.next_animal_id: int = 1
         self.sse_clients: set[Queue[str]] = set()
         self._current_events: list[EventItem] = []
         self._lock = asyncio.Lock()
         self.ecology: EcologyManager = EcologyManager()
-        # --- اقتصاد مصغر ---
-        self.market_price: dict[str, float] = {"wheat": 1.0, "wood": 1.0, "stone": 1.0}
+        self.market_price: dict[str, float] = {"wheat": 1.0, "wood": 1.0, "stone": 1.0, "grain": 1.0, "vegetable": 1.0, "fruit": 1.0, "industrial": 1.0}
         self._last_market_price: dict[str, float] | None = None
 
     def _generate_map(self) -> list[list[Tile]]:
@@ -55,8 +58,8 @@ class World:
                 elif r < 0.85:
                     t = 2
                 else:
-                    t = 3  # غابة / Forest — مأوى في العواصف
-                row.append(Tile(type=t, crop_growth=0.0, owner_id=None))
+                    t = 3
+                row.append(Tile(type=t, crop_growth=0.0, crop_type=None, owner_id=None))
             grid.append(row)
         return grid
 
@@ -68,10 +71,23 @@ class World:
         self.next_agent_id = self.agent_count + 1
         return agents
 
+    def _spawn_initial_animals(self) -> dict[int, AnimalSchema]:
+        animals: dict[int, AnimalSchema] = {}
+        count = max(3, min(10, int(settings.INITIAL_ANIMALS_COUNT)))
+        aid = 1
+        for i in range(count):
+            atype = random.choice(FRIENDLY_ANIMALS)
+            a = create_random_animal(aid, atype, self.map_grid, self.grid_size)
+            animals[a.id] = a
+            aid += 1
+        self.next_animal_id = aid
+        return animals
+
     def reset_world(self) -> None:
         self.tick = 0
         self.map_grid = self._generate_map()
         self.agents = self._spawn_initial_agents()
+        self.animals = self._spawn_initial_animals()
         self._current_events = [
             EventItem(
                 tick=0, agent_id=a.id, type="spawn",
@@ -79,6 +95,13 @@ class World:
                 payload={"name": a.name, "x": a.x, "y": a.y, "gender": a.gender},
             )
             for a in self.agents.values()
+        ] + [
+            EventItem(
+                tick=0, agent_id=None, type="animal_spawn",
+                text=f"Animal {an.id} ({an.type}: {an.name}) spawned at ({an.x},{an.y})",
+                payload={"animal_id": an.id, "animal_type": an.type, "name": an.name, "x": an.x, "y": an.y},
+            )
+            for an in self.animals.values()
         ]
 
     def serialize_map_to_dict(self) -> list[list[dict]]:
@@ -86,6 +109,9 @@ class World:
 
     def serialize_agents_to_dict(self) -> dict[int, dict]:
         return {aid: ag.model_dump(mode="json") for aid, ag in self.agents.items()}
+
+    def serialize_animals_to_dict(self) -> dict[int, dict]:
+        return {aid: an.model_dump(mode="json") for aid, an in self.animals.items()}
 
     def load_map_from_dict(self, data: list[list[dict]]) -> None:
         self.map_grid = [[Tile(**t) for t in row] for row in data]
@@ -111,6 +137,33 @@ class World:
         self.agents = agents
         self.next_agent_id = max_id + 1
 
+    def load_animals_from_dict(self, data: dict[str, dict] | list[dict]) -> None:
+        from app.schemas import AnimalTraits
+
+        animals: dict[int, AnimalSchema] = {}
+        max_id = 0
+
+        if isinstance(data, list):
+            items = {str(a["id"]): a for a in data}
+        elif isinstance(data, dict):
+            items = data
+        else:
+            items = {}
+
+        for k, v in items.items():
+            tr = v.pop("traits", {})
+            an = AnimalSchema(
+                **{
+                    **v,
+                    "traits": AnimalTraits(**tr) if isinstance(tr, dict) else AnimalTraits(),
+                }
+            )
+            animals[an.id] = an
+            if an.id > max_id:
+                max_id = an.id
+        self.animals = animals
+        self.next_animal_id = max_id + 1
+
     async def load_from_db(self) -> bool:
         from app.database import get_session_factory
         from app.models import WorldState as WorldStateModel
@@ -122,6 +175,7 @@ class World:
                 return False
             self.tick = ws.tick
             self.load_map_from_dict(ws.map_json)
+
             agents_data = ws.agents_json
             if isinstance(agents_data, list):
                 agents_dict = {str(a["id"]): a for a in agents_data}
@@ -130,6 +184,20 @@ class World:
             else:
                 agents_dict = {}
             self.load_agents_from_dict(agents_dict)
+
+            ws_dict = ws.__dict__ if hasattr(ws, "__dict__") else {}
+            animals_data = None
+            if isinstance(ws_dict, dict):
+                animals_data = ws_dict.get("animals_json") or None
+            if animals_data is None:
+                try:
+                    animals_data = getattr(ws, "animals_json", None)
+                except Exception:
+                    animals_data = None
+            if animals_data is None:
+                self.animals = {}
+            else:
+                self.load_animals_from_dict(animals_data)
             return True
 
     async def save_world_state(self) -> None:
@@ -140,11 +208,13 @@ class World:
         async with factory() as session:
             async with session.begin():
                 ws = await session.get(WorldStateModel, 1)
+                animals_json_payload = self.serialize_animals_to_dict()
                 payload = {
                     "id": 1,
                     "tick": self.tick,
                     "map_json": self.serialize_map_to_dict(),
                     "agents_json": self.serialize_agents_to_dict(),
+                    "animals_json": animals_json_payload,
                 }
                 if ws is None:
                     from sqlalchemy import insert
@@ -153,6 +223,10 @@ class World:
                     ws.tick = self.tick
                     ws.map_json = payload["map_json"]
                     ws.agents_json = payload["agents_json"]
+                    try:
+                        ws.animals_json = payload["animals_json"]
+                    except Exception:
+                        pass
 
     async def persist_events(self, events: list[EventItem]) -> None:
         if not events:
@@ -175,6 +249,7 @@ class World:
                     if e.type in (
                         "spawn", "eat", "sleep", "wake", "plant", "harvest",
                         "birth", "death", "pregnant", "capped", "chat",
+                        "animal_spawn",
                     )
                 ]
                 if rows:
@@ -265,33 +340,45 @@ class World:
             self.sse_clients.discard(q)
 
     def _recalc_market_price(self) -> bool:
-        """Realism: سعر القمح ينخفض فقط إذا كان المخزون الكلي > 200 وحدة."""
-        total_wheat = 0
+        total_grain = 0
         total_wood = 0
         total_stone = 0
+        total_vegetable = 0
+        total_fruit = 0
+        total_industrial = 0
         for a in self.agents.values():
-            total_wheat += int(a.inventory.wheat or 0)
-            total_wood += int(a.inventory.wood or 0)
-            total_stone += int(a.inventory.stone or 0)
+            inv = a.inventory
+            total_grain += int((inv.grain or 0) + (inv.wheat or 0))
+            total_wood += int(inv.wood or 0)
+            total_stone += int(inv.stone or 0)
+            total_vegetable += int(inv.vegetable or 0)
+            total_fruit += int(inv.fruit or 0)
+            total_industrial += int(inv.industrial or 0)
 
-        new_wheat = 1.0
-        if total_wheat > 200:
-            ratio = 200.0 / max(1.0, total_wheat)
-            new_wheat = max(0.25, min(1.0, ratio))
-        elif total_wheat < 30:
-            new_wheat = min(2.5, 1.0 + (30 - total_wheat) * 0.03)
+        new_grain = 1.0
+        total_food = total_grain + total_vegetable + total_fruit
+        if total_food > 300:
+            ratio = 300.0 / max(1.0, total_food)
+            new_grain = max(0.25, min(1.0, ratio))
+        elif total_food < 40:
+            new_grain = min(2.5, 1.0 + (40 - total_food) * 0.025)
 
         new_prices = {
-            "wheat": round(new_wheat, 3),
+            "wheat": round(new_grain, 3),
+            "grain": round(new_grain, 3),
+            "vegetable": round(new_grain * 1.1, 3),
+            "fruit": round(new_grain * 1.2, 3),
+            "industrial": round(1.3 + max(0, 20 - total_industrial) * 0.03, 3),
             "wood": round(1.0 + max(0, 20 - total_wood) * 0.02, 3),
             "stone": round(1.0 + max(0, 10 - total_stone) * 0.04, 3),
         }
 
+        def _changed(a, b, key):
+            return abs(a - b.get(key, 1.0)) > 0.01
+
         changed = (
             self._last_market_price is None
-            or abs(new_prices["wheat"] - self.market_price.get("wheat", 1.0)) > 0.01
-            or abs(new_prices["wood"] - self.market_price.get("wood", 1.0)) > 0.01
-            or abs(new_prices["stone"] - self.market_price.get("stone", 1.0)) > 0.01
+            or any(_changed(new_prices[k], self.market_price, k) for k in new_prices)
         )
 
         self._last_market_price = dict(self.market_price)
@@ -301,19 +388,24 @@ class World:
     async def do_tick(self) -> None: 
         self.tick += 1 
         tick_crops(self.map_grid) 
-        
+
         # 1. Snapshots قبل الحركة 
         snapshots = {aid: snapshot_agent(a) for aid, a in self.agents.items()} 
-        
+
         all_events = [] 
+
+        # 2. Agents AI
         for agent in list(self.agents.values()): 
             evs = run_agent_ai(agent, self.map_grid, self.grid_size, self.tick, self.agents) 
             all_events.extend(evs) 
-            
-        # ✅ التصحيح: تراكم الأحداث بدلاً من الاستبدال 
+
+        # 3. Animals AI
+        for animal in list(self.animals.values()):
+            run_animal_ai(animal, self.map_grid, self.grid_size)
+
         self._current_events.extend(all_events) 
-        
-        # 2. حساب Deltas 
+
+        # 4. حساب Deltas 
         deltas = [] 
         for aid, agent in self.agents.items(): 
             prev = snapshots.get(aid) 
@@ -326,16 +418,22 @@ class World:
             if abs(prev["energy"] - agent.energy) > 0.05: d.energy, changed = round(agent.energy, 2), True 
             if abs(prev["hp"] - agent.hp) > 0.05: d.hp, changed = round(agent.hp, 2), True 
             if prev["state"] != agent.state: d.state, changed = agent.state, True 
-            if prev["inventory_wheat"] != agent.inventory.wheat: d.inventory, changed = agent.inventory.model_copy(), True 
+            try:
+                prev_wheat = prev.get("inventory_wheat", 0)
+                cur_grain = int(getattr(agent.inventory, "wheat", 0) or 0) + int(getattr(agent.inventory, "grain", 0) or 0)
+                if prev_wheat != cur_grain:
+                    d.inventory, changed = agent.inventory.model_copy(), True
+            except Exception:
+                pass
             if changed: deltas.append(d) 
-            
-        # 3. بث SSE فوري (لحظي) 
+
+        # 5. بث SSE فوري
         sse_data = SSEData(tick=self.tick, agents_delta=deltas, new_events=all_events) 
         await self._broadcast_sse(sse_data) 
-        
-        # 4. حفظ دوري (Batch) كل 60 tick 
+
+        # 6. حفظ دوري
         if self.tick % settings.SAVE_INTERVAL_TICKS == 0: 
             await self.save_world_state() 
             await self.persist_profiles() 
             await self.persist_events(self._current_events) 
-            self._current_events.clear() # ✅ مسح القائمة بعد الحفظ 
+            self._current_events.clear() 

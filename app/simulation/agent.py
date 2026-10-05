@@ -4,7 +4,7 @@ import random
 import math
 from typing import TYPE_CHECKING
 
-from app.config import DIALOG_TEMPLATES, settings
+from app.config import DIALOG_TEMPLATES, HUMAN_TRAITS, HUMAN_TRAITS_EXTRA, settings
 from app.simulation.farming import harvest as do_harvest, plant as do_plant
 from app.simulation.pathfinding import bfs_next_step
 from app.simulation.reproduction import PREGNANCY_DURATION_TICKS, check_reproduction, give_birth
@@ -12,6 +12,8 @@ from app.simulation.reproduction import PREGNANCY_DURATION_TICKS, check_reproduc
 if TYPE_CHECKING:
     from app.schemas import AgentSchema, EventItem, Tile
 
+
+weather = "clear"
 
 NAMES_POOL = [
     "Adam", "Nour", "Layla", "Omar", "Sara", "Khalid", "Amira", "Youssef",
@@ -32,6 +34,12 @@ def random_gender() -> str:
     return random.choice(["male", "female"])
 
 
+def _random_traits_dict() -> dict:
+    """صفات عشوائية للـ 20 أساسية + 3 إضافية"""
+    all_traits = HUMAN_TRAITS + HUMAN_TRAITS_EXTRA
+    return {t: round(random.random(), 2) for t in all_traits}
+
+
 def create_random_agent(
     agent_id: int, grid: list[list["Tile"]], grid_size: int
 ) -> "AgentSchema":
@@ -40,8 +48,24 @@ def create_random_agent(
     while True:
         x = random.randint(0, grid_size - 1)
         y = random.randint(0, grid_size - 1)
-        if grid[y][x].type in (0, 3):  # أرض أو غابة
+        if grid[y][x].type in (0, 3):
             break
+
+    trait_values = _random_traits_dict()
+    starting_grain = random.randint(0, 3)
+    inventory = Inventory(
+        money=50.0,
+        grain=starting_grain,
+        wheat=starting_grain,
+        vegetable=0,
+        fruit=0,
+        industrial=0,
+        wood=random.randint(0, 1),
+        stone=0,
+        metal=0,
+        animal_product=0,
+        chemical=0,
+    )
 
     return AgentSchema(
         id=agent_id,
@@ -55,13 +79,8 @@ def create_random_agent(
         energy=float(random.randint(70, 100)),
         mood=float(random.randint(-10, 30)),
         money=50.0,
-        inventory=Inventory(wheat=random.randint(0, 3), wood=0, stone=0),
-        traits=Traits(
-            courage=random.random(),
-            intelligence=random.random(),
-            fertility=random.random(),
-            aggression=random.random(),
-        ),
+        inventory=inventory,
+        traits=Traits(**trait_values),
         state="idle",
         pregnancy_ticks=0,
         pregnancy_partner_id=None,
@@ -73,18 +92,15 @@ def create_random_agent(
 
 
 def _max_hp_for_age(age: int) -> float:
-    """الحد الأقصى لـ HP بناءً على العمر: يخفض 5% كل 10000 tick. الحد الأدنى 20%."""
     steps = int(age // 10000)
     ratio = max(0.2, 1.0 - 0.05 * steps)
     return 100.0 * ratio
 
 
 def _random_walk(
-    agent: "AgentSchema", grid: list[list["Tile"]], grid_size: int, weather: str
+    agent: "AgentSchema", grid: list[list["Tile"]], grid_size: int, w: str
 ) -> None:
-    """حركة عشوائية — معدلة بناءً على الطقس: rain/snow = 30% أقل احتمالية للحركة, storm = لا تحرك."""
-    if weather == "storm":
-        # storm: ابحث عن أقرب غابة إذا وُجدت، وبخلاف ذلك ابقى مكانك (لا تحرك)
+    if w == "storm":
         def forest_tile(x: int, y: int, tile: "Tile") -> bool:
             return tile.type == 3
 
@@ -96,8 +112,7 @@ def _random_walk(
 
     directions = [(0, -1), (1, 0), (0, 1), (-1, 0)]
     random.shuffle(directions)
-    # rain/snow: 30% أقل حركة = نستخدم 2 directions فقط بدلاً من 4
-    if weather in ("rain", "snow"):
+    if w in ("rain", "snow"):
         dirs = directions[:2]
     else:
         dirs = directions
@@ -107,7 +122,7 @@ def _random_walk(
         ny = agent.y + dy
         if 0 <= nx < grid_size and 0 <= ny < grid_size:
             tile = grid[ny][nx]
-            if tile.type != 1:  # لا شيء يدخل الماء باستثناء الموانئ
+            if tile.type != 1:
                 agent.x = nx
                 agent.y = ny
                 agent.state = "walking"
@@ -115,6 +130,8 @@ def _random_walk(
 
 
 def snapshot_agent(agent: "AgentSchema") -> dict:
+    inv = agent.inventory
+    grain_total = int((getattr(inv, "wheat", 0) or 0) + (getattr(inv, "grain", 0) or 0))
     return {
         "x": agent.x,
         "y": agent.y,
@@ -124,7 +141,7 @@ def snapshot_agent(agent: "AgentSchema") -> dict:
         "mood": agent.mood,
         "state": agent.state,
         "age": agent.age,
-        "inventory_wheat": agent.inventory.wheat,
+        "inventory_wheat": grain_total,
         "pregnancy_ticks": agent.pregnancy_ticks,
         "chat_bubble_text": agent.chat_bubble_text,
     }
@@ -216,28 +233,46 @@ def _social_interaction(
     return events
 
 
+def _total_food(agent: "AgentSchema") -> int:
+    inv = agent.inventory
+    total = 0
+    for field in ("grain", "wheat", "vegetable", "fruit"):
+        total += int(getattr(inv, field, 0) or 0)
+    return total
+
+
+def _eat_one_food(agent: "AgentSchema") -> bool:
+    """يأكل وحدة طعام بالترتيب: grain/wheat → vegetable → fruit"""
+    inv = agent.inventory
+    for field in ("grain", "wheat", "vegetable", "fruit"):
+        cur = int(getattr(inv, field, 0) or 0)
+        if cur > 0:
+            setattr(inv, field, cur - 1)
+            return True
+    return False
+
+
 def run_agent_ai(agent: "AgentSchema", grid, grid_size, tick, all_agents) -> list["EventItem"]:
+    from app.schemas import EventItem
+
     events = []
-    
-    # ✅ GUARD 1: إذا ميت، ارجع فارغاً فوراً 
+
+    # GUARD 1: إذا ميت، ارجع فارغاً فوراً
     if agent.state == "dead":
-        return [] # توقف فوري، لا حركة، لا أكل، لا حوار 
-        
-    # ✅ GUARD 2: فحص الموت بالنقص في HP 
+        return []
+
+    # GUARD 2: فحص الموت بالنقص في HP
     if agent.hp <= 0:
         agent.state = "dead"
-        return [EventItem(tick=tick, agent_id=agent.id, type="death", text=f"{agent.name} died")] 
-        
-    # ... بقية الكود القديم (Sleep, Eat, Move...)
+        return [EventItem(tick=tick, agent_id=agent.id, type="death", text=f"{agent.name} died")]
 
-    # ⭐ Realism: زيادة العمر كل tick!
+    # زيادة العمر كل tick
     agent.age += 1
     hp_cap = _max_hp_for_age(agent.age)
-    # clamp HP الحالي إلى hp_cap إذا تجاوزه
     if agent.hp > hp_cap:
         agent.hp = hp_cap
 
-    # ⭐ الموت الطبيعي: إذا العمر > 50000، احتمال يزداد تدريجياً
+    # الموت الطبيعي
     if agent.age > 50000:
         age_above = agent.age - 50000
         death_prob = min(0.005, age_above / 10_000_000)
@@ -277,12 +312,11 @@ def run_agent_ai(agent: "AgentSchema", grid, grid_size, tick, all_agents) -> lis
             agent.pregnancy_partner_id = None
         return events
 
-    # 2. ⭐ نظام النوم الحقيقي: إذا كان نائماً فلا يتحرك ولا يأكل حتى يعاود الطاقة 70
+    # 2. نظام النوم الحقيقي
     if agent.state == "sleeping":
         agent.energy = min(100.0, agent.energy + 0.8)
         agent.hunger = min(100.0, agent.hunger + 0.08)
         if agent.energy >= 70.0:
-            # الاستيقاظ: جوع أعلى 5% كعقاب
             agent.hunger = min(100.0, agent.hunger + 5.0)
             agent.state = "idle"
             events.append(EventItem(
@@ -298,10 +332,8 @@ def run_agent_ai(agent: "AgentSchema", grid, grid_size, tick, all_agents) -> lis
             ))
         return events
 
-    # انخفاض طفيف للطاقة إذا لم يكن نائماً
     if agent.energy < 20:
         agent.state = "sleeping"
-        # النوم الحقيقي: لا يفعل شيئاً آخر في هذا الـ tick
         return events
 
     agent.hunger = min(100.0, agent.hunger + 0.3)
@@ -311,14 +343,14 @@ def run_agent_ai(agent: "AgentSchema", grid, grid_size, tick, all_agents) -> lis
 
     # 3. فحص الجوع المرتفع → أكل أو البحث عن مزرعة
     if agent.hunger > 70:
-        if agent.inventory.wheat > 0:
-            agent.inventory.wheat -= 1
+        if _total_food(agent) > 0:
+            _eat_one_food(agent)
             agent.hunger = max(0.0, agent.hunger - 30)
             agent.state = "eating"
             events.append(EventItem(
                 tick=tick, agent_id=agent.id, type="eat",
-                text=f"Agent {agent.id} ({agent.name}) ate wheat",
-                payload={"agent_id": agent.id, "wheat_left": agent.inventory.wheat},
+                text=f"Agent {agent.id} ({agent.name}) ate food (grain/vegetable/fruit)",
+                payload={"agent_id": agent.id, "food_left": _total_food(agent)},
             ))
             return events
         else:
@@ -343,8 +375,8 @@ def run_agent_ai(agent: "AgentSchema", grid, grid_size, tick, all_agents) -> lis
             agent.state = "farming"
             events.append(EventItem(
                 tick=tick, agent_id=agent.id, type="harvest",
-                text=f"Agent {agent.id} ({agent.name}) harvested wheat",
-                payload={"agent_id": agent.id, "wheat": agent.inventory.wheat},
+                text=f"Agent {agent.id} ({agent.name}) harvested crops",
+                payload={"agent_id": agent.id, "grain_total": _total_food(agent)},
             ))
             return events
 
@@ -354,12 +386,12 @@ def run_agent_ai(agent: "AgentSchema", grid, grid_size, tick, all_agents) -> lis
             agent.state = "farming"
             events.append(EventItem(
                 tick=tick, agent_id=agent.id, type="plant",
-                text=f"Agent {agent.id} ({agent.name}) planted wheat",
-                payload={"agent_id": agent.id, "wheat_left": agent.inventory.wheat},
+                text=f"Agent {agent.id} ({agent.name}) planted crops",
+                payload={"agent_id": agent.id, "food_left": _total_food(agent)},
             ))
             return events
 
-    # 6. لا شيء آخر → تجول عشوائي (يتأثر بالطقس: rain/snow/storm)
+    # 6. لا شيء آخر → تجول عشوائي
     _random_walk(agent, grid, grid_size, weather)
     if agent.state != "walking" and agent.state != "sleeping":
         agent.state = "idle"

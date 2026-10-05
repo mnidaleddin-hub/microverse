@@ -91,6 +91,7 @@ async def health() -> HealthResponse:
         status="alive",
         tick=WORLD.tick,
         agents_count=len(WORLD.agents),
+        animals_count=len(WORLD.animals),
     )
 
 
@@ -103,6 +104,7 @@ async def world_init() -> WorldInitResponse:
             tick=WORLD.tick,
             map=[row[:] for row in WORLD.map_grid],
             agents=list(WORLD.agents.values()),
+            animals=list(WORLD.animals.values()),
             world_state=WorldUpdate(
                 season=eco_state.get("season"),
                 weather=eco_state.get("weather"),

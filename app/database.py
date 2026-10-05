@@ -26,11 +26,19 @@ def get_session_factory() -> async_sessionmaker[AsyncSession]:
         _async_session = async_sessionmaker(get_engine(), class_=AsyncSession, expire_on_commit=False) 
     return _async_session 
 
-async def create_tables() -> None: 
-    from app.models import Base 
-    engine = get_engine() 
-    async with engine.begin() as conn: 
-        await conn.run_sync(Base.metadata.create_all) 
+async def create_tables() -> None:
+    from sqlalchemy import text
+    from app.models import Base
+    engine = get_engine()
+    async with engine.begin() as conn:
+        await conn.run_sync(Base.metadata.create_all)
+        try:
+            rows = await conn.execute(text("PRAGMA table_info(world_state)"))
+            cols = {row[1] for row in rows.fetchall()}
+            if "animals_json" not in cols:
+                await conn.execute(text("ALTER TABLE world_state ADD COLUMN animals_json JSON NOT NULL DEFAULT '{}'"))
+        except Exception:
+            pass 
 
 async def get_db() -> AsyncGenerator[AsyncSession, None]: 
     factory = get_session_factory() 

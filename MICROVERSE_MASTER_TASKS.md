@@ -1,5 +1,5 @@
 #  MICROVERSE MASTER TASK TRACKER 
-> آخر تحديث: 2026-10-05 | الحالة: ✅ المرحلة 2 مكتملة — بانتظار المرحلة 3
+> آخر تحديث: 2026-10-05 | الحالة: ⏳ المرحلة 3 قيد التنفيذ
 
 ## ✅ المهام المنجزة 
 - [x] إنشاء هذا الملف 
@@ -13,27 +13,33 @@
 
 ## ✅ المهام المنجزة (المرحلة 2/10) — Phase 2
 - [x] أ. حل الشاشة السوداء نهائياً في `main.js` 
-    - [x] التحقق من `game-container` 
-    - [x] فرض ظهور الـ Canvas والـ Z-Index 
-    - [x] إضافة مستطيل اختبار أحمر 
-    - [x] التحقق من `BACKEND_URL` 
 - [x] ب. حل تناقض Alive/Dead 
-    - [x] في `app/simulation/agent.py`: تعديل `run_agent_ai` 
-    - [x] في `main.js`: تعديل `updateDashboardCards` 
 - [x] ج. إصلاح الموارد = 0 
-    - [x] في `main.js`: تعديل `updateDashboardCards` (Safe parsing + money)
-    - [x] التحقق من `app/simulation/farming.py`: دالة `harvest` تعمل بشكل صحيح (تزيد wheat وترجع True)
 - [x] د. توسيع الـ Dashboard إلى 20+ بطاقة/مؤشر 
-    - [x] في `index.html`: إضافة الهيكل الجديد (Total, Alive, Dead, Pregnant, Males, Females, Season, Weather, WheatPrice, Wheat/Wood/Stone/Money, Sleeping/Eating/Farming/Walking)
-    - [x] في `main.js`: تحديث `updateDashboardCards` (حساب كافة المؤشرات الجديدة + Safe DOM guards)
-    - [x] في `style.css`: إضافة الأنماط (dashboard-grid 2-column layout, stat-card styling, alive/dead colors)
-- [x] هـ. اختبارات المرحلة 2
-    - [x] compileall (0 أخطاء)
-    - [x] Health endpoint (200 OK + status:alive)
-    - [x] SSE stream (text/event-stream + live ticks)
-    - [x] World init (40x40 grid + 15 agents)
+- [x] هـ. اختبارات المرحلة 2 (compileall / health / SSE / init)
 - [x] و. Commit & Push النهائي للمرحلة 2 (SHA: 249a4d0)
   - URL: https://github.com/mnidaleddin-hub/microverse/commit/249a4d0
+
+## ⏳ المهام الحالية (المرحلة 3/10) — Phase 3: Mega Content Drop + Genetic Mutation
+- [⏳] أ. تحديث هياكل البيانات (Data Structures)
+    - [ ] في `app/schemas.py`: Enums (CropCategory, MaterialCategory, AnimalType) + Inventory بالفئات + AnimalSchema
+    - [ ] في `app/config.py`: HUMAN_TRAITS (20), ANIMAL_TRAITS (20), CROP_PROPERTIES (20 محصول)
+- [ ] ب. نظام الطفرات الجينية (Mutation System) في `app/simulation/reproduction.py`: inherit_traits مع MUTATION_RATE=5%
+- [ ] ج. دمج الحيوانات في العالم (Animal Integration)
+    - [ ] في `app/schemas.py`: AnimalSchema
+    - [ ] في `app/simulation/world.py`: self.animals + _spawn_initial_animals + save/load animals_json
+    - [ ] إنشاء `app/simulation/animal_ai.py`: run_animal_ai بسيط
+- [ ] د. تحديث منطق الكائنات (Agent Logic)
+    - [ ] في `app/simulation/agent.py`: البحث عن category=grain عند الجوع
+    - [ ] في `app/simulation/farming.py`: الحصاد يضيف إلى الفئة الصحيحة في inventory
+- [ ] هـ. بروتوكول الاختبار الإلزامي
+    - [ ] compileall (0 أخطاء)
+    - [ ] تشغيل الخادم + Application startup complete
+    - [ ] /api/world/init يحتوي على الـ 20 صفة بشرية في traits
+    - [ ] الطفرة الجينية تعمل (traits الطفل ≠ متوسط الأبوين)
+    - [ ] animals_json يحفظ في DB بدون أخطاء JSON
+- [ ] و. Commit & Push + تحديث SHA النهائي للمرحلة 3
+  - Message: "Phase 3: Mega Content Drop (20 crops/materials/animals) + Genetic Mutation System"
 
 ## 🐛 سجل المشاكل والحلول 
 - تم إصلاح `ImportError` لـ `DIALOG_TEMPLATES` في `app/config.py`.
@@ -41,4 +47,4 @@
 - تم إضافة ديناميكية سعر القمح (supply/demand) بناءً على المخزون وعدد الكائنات الحية.
 
 ## 🚀 الخطوات التالية 
-- المرحلة 3: محتوى Minecraft-style (20 محصول/حيوان) 
+- المرحلة 4: (TBD — بعد إنهاء المرحلة 3) 

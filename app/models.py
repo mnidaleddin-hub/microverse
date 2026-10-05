@@ -25,6 +25,7 @@ class WorldState(Base):
     tick: Mapped[int] = mapped_column(BigInteger, default=0, nullable=False)
     map_json: Mapped[dict] = mapped_column(JSON, nullable=False, default=dict)
     agents_json: Mapped[dict] = mapped_column(JSON, nullable=False, default=dict)
+    animals_json: Mapped[dict | list] = mapped_column(JSON, nullable=False, default=dict)
     updated_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), onupdate=func.now()
     )

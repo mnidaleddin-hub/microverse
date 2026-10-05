@@ -3,13 +3,17 @@ from __future__ import annotations
 import random
 from typing import TYPE_CHECKING
 
-from app.config import settings
+from app.config import HUMAN_TRAITS, HUMAN_TRAITS_EXTRA, settings
 
 if TYPE_CHECKING:
     from app.schemas import AgentSchema, Traits
 
 
 PREGNANCY_DURATION_TICKS = 7200  # ساعتين بسرعة 1x
+
+MUTATION_RATE = 0.05
+MUTATION_MAGNITUDE = 0.15
+NEW_TRAIT_CHANCE = 0.005
 
 
 def check_reproduction(agent: "AgentSchema", partner: "AgentSchema") -> bool:
@@ -24,7 +28,6 @@ def check_reproduction(agent: "AgentSchema", partner: "AgentSchema") -> bool:
         return False
     if agent.pregnancy_ticks != 0 or partner.pregnancy_ticks != 0:
         return False
-    # السماح بـ idle / walking للسماح باللقاء عند الوصول إلى tile معاً
     social_ok = {"idle", "walking"}
     if agent.state not in social_ok or partner.state not in social_ok:
         return False
@@ -37,15 +40,15 @@ def check_reproduction(agent: "AgentSchema", partner: "AgentSchema") -> bool:
         return False
 
     female_agent = agent if agent.gender == "female" else partner
-    fertility = female_agent.traits.fertility
-    if random.random() > max(0.15, min(0.85, fertility)):
+    fertility = getattr(female_agent.traits, "fertility", 0.5)
+    if random.random() > max(0.15, min(0.85, float(fertility))):
         return False
 
     return True
 
 
 def give_birth(mother: "AgentSchema", father: "AgentSchema", next_agent_id: int) -> "AgentSchema | None":
-    """إجراء عملية الولادة — خلق كائن جديد بجينات الأبوين + طفرة عشوائية"""
+    """إجراء عملية الولادة — خلق كائن جديد بجينات الأبوين + طفرة"""
     from app.schemas import AgentSchema, Inventory
 
     if mother.gender != "female":
@@ -68,7 +71,7 @@ def give_birth(mother: "AgentSchema", father: "AgentSchema", next_agent_id: int)
         energy=float(random.randint(80, 100)),
         mood=float(random.randint(0, 30)),
         money=25.0,
-        inventory=Inventory(wheat=0, wood=0, stone=0),
+        inventory=Inventory(),
         traits=baby_traits,
         state="idle",
         pregnancy_ticks=0,
@@ -81,21 +84,47 @@ def give_birth(mother: "AgentSchema", father: "AgentSchema", next_agent_id: int)
     return baby
 
 
+def _traits_to_dict(traits_obj: "Traits") -> dict:
+    """تحويل كائن Traits (BaseModel) إلى قاموس عادي"""
+    try:
+        return {k: float(v) for k, v in traits_obj.model_dump().items()}
+    except Exception:
+        return {}
+
+
 def inherit_traits(mother: "AgentSchema", father: "AgentSchema") -> "Traits":
-    """توريث الصفات: متوسط صفات الأبوين ± طفرة عشوائية [-0.1, 0.1] لكل صفة"""
+    """توريث الصفات من الأبوين مع نظام الطفرات الجينية
+    - 5% فرصة طفرة لكل صفة بمقدار ±0.15
+    - 0.5% فرصة لظهور صفة إضافية جديدة (charisma/discipline/resilience)
+    """
     from app.schemas import Traits
+
+    mother_traits_d = _traits_to_dict(mother.traits)
+    father_traits_d = _traits_to_dict(father.traits)
+
+    all_possible = HUMAN_TRAITS + HUMAN_TRAITS_EXTRA
 
     def _clamp(v: float) -> float:
         return max(0.0, min(1.0, v))
 
-    mutation = lambda: random.uniform(-0.1, 0.1)
+    final_values: dict[str, float] = {}
 
-    return Traits(
-        courage=_clamp(((mother.traits.courage + father.traits.courage) / 2.0) + mutation()),
-        intelligence=_clamp(((mother.traits.intelligence + father.traits.intelligence) / 2.0) + mutation()),
-        fertility=_clamp(((mother.traits.fertility + father.traits.fertility) / 2.0) + mutation()),
-        aggression=_clamp(((mother.traits.aggression + father.traits.aggression) / 2.0) + mutation()),
-    )
+    for trait in all_possible:
+        m_val = float(mother_traits_d.get(trait, 0.5))
+        f_val = float(father_traits_d.get(trait, 0.5))
+        base_val = (m_val + f_val) / 2.0
+
+        final_val = base_val
+        if random.random() < MUTATION_RATE:
+            mutation = random.uniform(-MUTATION_MAGNITUDE, MUTATION_MAGNITUDE)
+            final_val = _clamp(base_val + mutation)
+
+        if trait not in HUMAN_TRAITS and random.random() < NEW_TRAIT_CHANCE:
+            final_val = random.uniform(0.3, 0.7)
+
+        final_values[trait] = round(final_val, 2)
+
+    return Traits(**final_values)
 
 
 def random_name() -> str:
