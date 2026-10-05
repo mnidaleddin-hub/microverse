@@ -40,13 +40,13 @@ async def create_tables() -> None:
                 await conn.execute(text("ALTER TABLE world_state ADD COLUMN animals_json JSON NOT NULL DEFAULT '{}'"))
         except Exception:
             pass
-        # PostgreSQL check (with schema)
+        # PostgreSQL check
         try:
-            result = await conn.execute(text("SELECT column_name FROM information_schema.columns WHERE table_schema='public' AND table_name='world_state' AND column_name='animals_json'"))
+            result = await conn.execute(text("SELECT column_name FROM information_schema.columns WHERE table_name='world_state' AND column_name='animals_json'"))
             if not result.fetchone():
                 await conn.execute(text("ALTER TABLE world_state ADD COLUMN animals_json JSON NOT NULL DEFAULT '{}'::json"))
-        except Exception as e:
-            print(f"[DB Migration] PostgreSQL ALTER error: {e}")
+        except Exception:
+            pass
 
 async def get_db() -> AsyncGenerator[AsyncSession, None]: 
     factory = get_session_factory() 
