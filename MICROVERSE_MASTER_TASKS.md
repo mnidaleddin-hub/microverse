@@ -61,12 +61,15 @@
 ## 🚀 الخطوات التالية 
 - المرحلة 7: (TBD — بعد إنهاء المرحلة 6)
 
-## ⏳ المهام الجارية (المرحلة 6/10) — Phase 6: Real-time God Mode Editor
-- [ ] أ. Backend Schemas: إضافة `EditAgentRequest`, `EditTileRequest`, `GodModeCommand` في `app/schemas.py`
-- [ ] ب. World Logic: تحسين `edit_agent` (Dead Guard) + إضافة `edit_tile` + `execute_god_command` (kill_all, etc) في `app/simulation/world.py`
-- [ ] ج. Main Endpoints: إضافة `PATCH /api/admin/agent` + `PATCH /api/admin/tile` + توسيع `world_control` بأوامر kill_all في `app/main.py`
-- [ ] د. Frontend HTML: توسيع Tab God Mode بـ (Agent Editor + Tile Editor Mode + Global Commands: Kill All / Force Rain / Force Winter / Spawn 10) + نافذة Tile Editor Popup في `index.html`
-- [ ] هـ. Frontend JS: تحسين `showAgentDetails` (Sliders للـ HP/Hunger/Energy/Mood/Money + select لـ State) + منطق Edit Tile Mode (Optimistic UI + PATCH) + ربط Global Commands في `main.js`
-- [ ] و. Frontend CSS: أنماط Edit Inputs (حدود زرقاء، خلفية داكنة) + Cursor crosshair لـ Tile Mode + أنماط Tile Popup في `style.css`
-- [ ] ز. حراس الأداء: Optimistic UI للـ Tile/Agent + منع تعديل الأموات إلا بـ revive + SSE Delta متوافق
-- [ ] ح. بروتوكول الإغلاق: compileall (exit 0) + تشغيل محلي + اختبار بصري + Git Push + SHA
+## ✅ المرحلة 6/10 مكتملة — Phase 6: Real-time God Mode Editor
+- [x] أ. Backend Schemas: إضافة `EditAgentRequest`, `EditTileRequest`, `GodModeCommand` في `app/schemas.py`
+- [x] ب. World Logic: تحسين `edit_agent` (Dead Guard) + إضافة `edit_tile` + `execute_god_command` (kill_all, revive_all, force_weather, force_season, spawn_animals, fill_all_needs, give_money_all) في `app/simulation/world.py`
+- [x] ج. Main Endpoints: إضافة `PATCH /api/admin/agent` + `PATCH /api/admin/tile` + `POST /api/admin/god_command` + توسيع `world_control` بأوامر جماعية + بث SSE للـ Deltas في `app/main.py`
+- [x] د. Frontend HTML: إعادة تصميم Tab God Mode بـ Sections قابلة للطي (Weather/Seasons/Tile Editor/Agent Editor/Global Commands/الحيوانات) + Advanced Agent Edit Form (7 حقول: Sliders + Numbers) + نافذة Tile Editor Popup (7 أنواع Biomes + Growth Slider) في `index.html`
+- [x] هـ. Frontend JS: تحسين `showAgentDetails` (Sliders للـ HP/Hunger/Energy/Mood/Money + select لـ State) + زر ✏️ Edit + Save مع PATCH + منطق Edit Tile Mode (crosshair + Tile Popup) + Optimistic UI مع Rollback + ربط Global Commands في `main.js`
+- [x] و. Frontend CSS: Tile Edit Mode Cursor (crosshair) + Section Collapsible Design + Advanced Edit Fields (Sliders بألوان HP=حمراء, Hunger=برتقالية, Energy=خضراء, Mood=بنفسجية + Cancel أحمر + Save أخضر) + Tile Editor Popup (Grid + Biome Icons) في `style.css`
+- [x] ز. حراس الأداء: Optimistic UI للـ Tile/Agent (Snapshot + Rollback) + Dead Guard على edit_agent في Backend (الكائنات الميتة لا يمكن تعديلها إلا revive/hp/state) + SSE Delta متوافق مع الهياكل الحالية (AgentDelta, grid_delta)
+- [x] ح. بروتوكول الإغلاق: compileall (exit 0, 0 أخطاء) + تشغيل محلي (health: alive, agents=15, animals=8) + اختبار curl للـ Endpoints (PATCH agent: hp=10 OK | PATCH tile: (5,5)→Water OK | force_weather: rain OK | give_money_all: 15×$500 OK) + Git Push ناجح
+  - Commit SHA: 287775f — 2026-10-05
+  - Commit message: "Phase 6: Real-time God Mode Editor (Agent/Tile editing, global commands, optimistic UI)"
+  - URL: https://github.com/mnidaleddin-hub/microverse/commit/287775f
