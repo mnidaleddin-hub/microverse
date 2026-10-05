@@ -3,84 +3,57 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
-    <meta name="apple-mobile-web-app-capable" content="yes">
-    <meta name="mobile-web-app-capable" content="yes">
     <meta name="theme-color" content="#06120b">
     <title>🌍 Microverse — AI Social Simulation v2</title>
     <link rel="stylesheet" href="style.css">
-
-    <!-- PixiJS 7 — المحرك الرسومي الأساسي -->
     <script src="https://cdn.jsdelivr.net/npm/pixi.js@7/dist/pixi.min.js"></script>
-
-    <!-- Chart.js 4 — الرسوم البيانية الحية (StatsManager) -->
     <script src="https://cdn.jsdelivr.net/npm/chart.js@4/dist/chart.umd.min.js"></script>
-
-    <!-- Howler.js 2.2 — إدارة المؤثرات الصوتية الخفيفة (SoundManager) -->
     <script src="https://cdn.jsdelivr.net/npm/howler@2.2.4/dist/howler.min.js"></script>
 </head>
 <body>
-    <!-- =============== SIDEBAR TOGGLE (HAMBURGER) =============== -->
-    <button id="sidebar-toggle" class="tool-btn" aria-label="Toggle dashboard">
+    <!-- Glassmorphic Top Navbar -->
+    <nav id="top-navbar" class="glass-nav" aria-label="Main navigation">
+        <div class="nav-brand">
+            <span class="nav-icon">🌍</span>
+            <h1>Microverse <span class="nav-badge">v2</span></h1>
+        </div>
+        <div class="nav-tools">
+            <div id="connection-status" class="nav-status">
+                <span id="status-dot" class="status-dot status-connecting"></span>
+                <span id="status-text">Connecting...</span>
+            </div>
+            <button id="follow-btn" class="glass-btn" title="Follow selected agent">👁️ Follow</button>
+            <button id="mute-btn" class="glass-btn" title="Toggle sound">🔇 Mute</button>
+            <div id="world-clock" class="nav-clock" title="In-world time">
+                <span id="clock-icon">☀️</span>
+                <span id="clock-text">Day 1 · 12:00</span>
+            </div>
+            <div id="world-weather" class="nav-weather" title="Weather">
+                <span id="weather-icon">🌤️</span>
+                <span id="weather-text">Clear</span>
+            </div>
+        </div>
+    </nav>
+
+    <!-- Sidebar Toggle -->
+    <button id="sidebar-toggle" class="glass-btn toggle-btn" aria-label="Toggle dashboard">
         <span class="tool-icon">☰</span>
         <span class="tool-text">Dashboard</span>
     </button>
 
-    <!-- =============== SIDEBAR BACKDROP =============== -->
+    <!-- Backdrop -->
     <div id="sidebar-backdrop"></div>
 
     <div id="app">
-        <!-- LEFT / CENTER: GAME AREA + HEADER + CONTROLS + MINIMAP -->
+        <!-- Game Area -->
         <div id="game-wrapper">
-            <div id="game-header">
-                <h1>🌍 Microverse <span class="header-badge">v2</span></h1>
-
-                <div id="header-tools">
-                    <!-- حالة الاتصال بالـ Backend -->
-                    <div id="connection-status">
-                        <span id="status-dot" class="status-dot status-connecting"></span>
-                        <span id="status-text">Connecting...</span>
-                    </div>
-
-                    <div class="header-divider"></div>
-
-                    <!-- زر متابعة الكائن المحدد -->
-                    <button id="follow-btn" class="tool-btn" title="Follow selected agent (if any)">
-                        👁️ <span class="tool-text">Follow</span>
-                    </button>
-
-                    <!-- زر كتم الصوت / تشغيله (أول تفاعل يسمح بالصوت — Browser Policy) -->
-                    <button id="mute-btn" class="tool-btn" title="Enable / Disable sounds (no autoplay)">
-                        🔇 <span class="tool-text">Muted</span>
-                    </button>
-
-                    <div class="header-divider"></div>
-
-                    <!-- الوقت الحالي في العالم (Day/Night) -->
-                    <div id="world-clock" title="In-world time">
-                        <span id="clock-icon">☀️</span>
-                        <span id="clock-text">Day 1 · 12:00</span>
-                    </div>
-
-                    <!-- الطقس الحالي في العالم -->
-                    <div id="world-weather" title="Weather">
-                        <span id="weather-icon">🌤️</span>
-                        <span id="weather-text">Clear</span>
-                    </div>
-                </div>
-            </div>
-
-            <!-- منطقة اللعب الرئيسية (PixiJS lives here) -->
             <div id="game-container">
-
-                <!-- أزرار التحكم بالتكبير/التصغير فوق الشاشة -->
                 <div id="zoom-controls">
                     <button id="zoom-in-btn" title="Zoom In">➕</button>
                     <button id="zoom-out-btn" title="Zoom Out">➖</button>
-                    <button id="zoom-center-btn" title="Center View + Reset Zoom">🎯</button>
+                    <button id="zoom-center-btn" title="Center View">🎯</button>
                     <div id="zoom-level">100%</div>
                 </div>
-
-                <!-- الخريطة المصغرة (Minimap) — زاوية سفلية-يسار -->
                 <div id="minimap-container">
                     <div id="minimap-header">🗺️ Minimap</div>
                     <canvas id="minimap-canvas" width="120" height="120"></canvas>
@@ -93,113 +66,70 @@
                         <span class="legend-item"><span class="legend-color legend-female"></span>♀</span>
                     </div>
                 </div>
-
             </div>
         </div>
 
-        <!-- RIGHT: SIDEBAR — DASHBOARD TABS (Overview / Demographics / God Mode) -->
-        <div id="sidebar">
+        <!-- Slide-in Drawer Sidebar -->
+        <aside id="sidebar" class="glass-drawer" aria-label="Dashboard">
             <div id="sidebar-header">
                 <h2>📊 Dashboard</h2>
-                <button id="toggle-charts-btn" class="tool-btn" title="Toggle live charts panel">
-                    📈 <span class="tool-text">Charts</span>
-                </button>
+                <button id="toggle-charts-btn" class="glass-btn" title="Toggle charts">📈 Charts</button>
             </div>
 
-            <!-- نظام التبويبات (Tabs) -->
             <div class="tabs-header">
                 <button class="tab-btn active" data-tab="tab-overview">🏠 Overview</button>
                 <button class="tab-btn" data-tab="tab-demographics">👥 Demographics</button>
                 <button class="tab-btn" data-tab="tab-godmode">⚡ God Mode</button>
             </div>
 
-            <!-- اللوحة القابلة للطي — الرسوم البيانية الحية (Charts Panel) -->
             <div id="charts-panel" class="collapsed">
-                <div class="panel-header">
-                    <h3>📈 Live Trends (last 60 ticks)</h3>
-                </div>
+                <div class="panel-header"><h3>📈 Live Trends</h3></div>
                 <div class="charts-grid">
-                    <div class="chart-card">
-                        <div class="chart-title">👥 Population</div>
-                        <canvas id="chart-population" height="120"></canvas>
-                    </div>
-                    <div class="chart-card">
-                        <div class="chart-title">🍕 Avg Hunger</div>
-                        <canvas id="chart-hunger" height="120"></canvas>
-                    </div>
-                    <div class="chart-card">
-                        <div class="chart-title">🌾 Total Wheat</div>
-                        <canvas id="chart-wheat" height="120"></canvas>
-                    </div>
+                    <div class="chart-card"><div class="chart-title">👥 Population</div><canvas id="chart-population" height="120"></canvas></div>
+                    <div class="chart-card"><div class="chart-title">🍕 Avg Hunger</div><canvas id="chart-hunger" height="120"></canvas></div>
+                    <div class="chart-card"><div class="chart-title">🌾 Total Wheat</div><canvas id="chart-wheat" height="120"></canvas></div>
                 </div>
             </div>
 
-            <!-- ===== TAB 1: OVERVIEW ===== -->
             <div id="tab-overview" class="tab-panel active">
                 <div class="dashboard-grid">
-                  <!-- الديموغرافيا -->
-                  <div class="stat-card"><span class="label">Total</span><span id="total-count" class="value">0</span></div>
-                  <div class="stat-card"><span class="label">Alive</span><span id="alive-count" class="value alive">0</span></div>
-                  <div class="stat-card"><span class="label">Dead</span><span id="dead-count" class="value dead">0</span></div>
-                  <div class="stat-card"><span class="label">Pregnant</span><span id="pregnant-count" class="value">0</span></div>
-                  <div class="stat-card"><span class="label">Males</span><span id="male-count" class="value">0</span></div>
-                  <div class="stat-card"><span class="label">Females</span><span id="female-count" class="value">0</span></div>
-                   
-                  <!-- البيئة والاقتصاد -->
-                  <div class="stat-card"><span class="label">Season</span><span id="season-val" class="value">Spring</span></div>
-                  <div class="stat-card"><span class="label">Weather</span><span id="weather-val" class="value">Clear</span></div>
-                  <div class="stat-card"><span class="label">Wheat Price</span><span id="wheat-price" class="value">1.0</span></div>
-                   
-                  <!-- الموارد الأساسية -->
-                  <div class="stat-card"><span class="label">🌾 Wheat</span><span id="wheat-total" class="value">0</span></div>
-                  <div class="stat-card"><span class="label">🪵 Wood</span><span id="wood-total" class="value">0</span></div>
-                  <div class="stat-card"><span class="label">🪨 Stone</span><span id="stone-total" class="value">0</span></div>
-                  <div class="stat-card"><span class="label">💰 Money</span><span id="money-total" class="value">0</span></div>
-
-                  <!-- الموارد الجديدة (الـ 6 بطاقات) -->
-                  <div class="stat-card res-grain"><span class="label">🌾 Grain</span><span id="grain-total" class="value">0</span></div>
-                  <div class="stat-card res-veg"><span class="label">🥬 Vegetable</span><span id="vegetable-total" class="value">0</span></div>
-                  <div class="stat-card res-fruit"><span class="label">🍎 Fruit</span><span id="fruit-total" class="value">0</span></div>
-                  <div class="stat-card res-ind"><span class="label">🏭 Industrial</span><span id="industrial-total" class="value">0</span></div>
-                  <div class="stat-card res-metal"><span class="label">⚙️ Metal</span><span id="metal-total" class="value">0</span></div>
-                  <div class="stat-card res-animal"><span class="label">🥛 Animal Prod</span><span id="animal_product-total" class="value">0</span></div>
-                 
-                  <!-- الحالات النشطة -->
-                  <div class="stat-card"><span class="label">Sleeping</span><span id="state-sleeping" class="value">0</span></div>
-                  <div class="stat-card"><span class="label">Eating</span><span id="state-eating" class="value">0</span></div>
-                  <div class="stat-card"><span class="label">Farming</span><span id="state-farming" class="value">0</span></div>
-                  <div class="stat-card"><span class="label">Walking</span><span id="state-walking" class="value">0</span></div>
+                    <div class="stat-card"><span class="label">Total</span><span id="total-count" class="value">0</span></div>
+                    <div class="stat-card"><span class="label">Alive</span><span id="alive-count" class="value alive">0</span></div>
+                    <div class="stat-card"><span class="label">Dead</span><span id="dead-count" class="value dead">0</span></div>
+                    <div class="stat-card"><span class="label">Pregnant</span><span id="pregnant-count" class="value">0</span></div>
+                    <div class="stat-card"><span class="label">Males</span><span id="male-count" class="value">0</span></div>
+                    <div class="stat-card"><span class="label">Females</span><span id="female-count" class="value">0</span></div>
+                    <div class="stat-card"><span class="label">Season</span><span id="season-val" class="value">Spring</span></div>
+                    <div class="stat-card"><span class="label">Weather</span><span id="weather-val" class="value">Clear</span></div>
+                    <div class="stat-card"><span class="label">Wheat Price</span><span id="wheat-price" class="value">1.0</span></div>
+                    <div class="stat-card"><span class="label">🌾 Wheat</span><span id="wheat-total" class="value">0</span></div>
+                    <div class="stat-card"><span class="label">🪵 Wood</span><span id="wood-total" class="value">0</span></div>
+                    <div class="stat-card"><span class="label">🪨 Stone</span><span id="stone-total" class="value">0</span></div>
+                    <div class="stat-card"><span class="label">💰 Money</span><span id="money-total" class="value">0</span></div>
+                    <div class="stat-card res-grain"><span class="label">🌾 Grain</span><span id="grain-total" class="value">0</span></div>
+                    <div class="stat-card res-veg"><span class="label">🥬 Vegetable</span><span id="vegetable-total" class="value">0</span></div>
+                    <div class="stat-card res-fruit"><span class="label">🍎 Fruit</span><span id="fruit-total" class="value">0</span></div>
+                    <div class="stat-card res-ind"><span class="label">🏭 Industrial</span><span id="industrial-total" class="value">0</span></div>
+                    <div class="stat-card res-metal"><span class="label">⚙️ Metal</span><span id="metal-total" class="value">0</span></div>
+                    <div class="stat-card res-animal"><span class="label">🥛 Animal Prod</span><span id="animal_product-total" class="value">0</span></div>
+                    <div class="stat-card"><span class="label">Sleeping</span><span id="state-sleeping" class="value">0</span></div>
+                    <div class="stat-card"><span class="label">Eating</span><span id="state-eating" class="value">0</span></div>
+                    <div class="stat-card"><span class="label">Farming</span><span id="state-farming" class="value">0</span></div>
+                    <div class="stat-card"><span class="label">Walking</span><span id="state-walking" class="value">0</span></div>
                 </div>
             </div>
 
-            <!-- ===== TAB 2: DEMOGRAPHICS ===== -->
             <div id="tab-demographics" class="tab-panel">
-                <div class="demo-section">
-                    <h4 class="demo-title">🏆 Top 5 — الأغنى (Money)</h4>
-                    <ul id="demo-top-money" class="demo-list"></ul>
-                </div>
-                <div class="demo-section">
-                    <h4 class="demo-title">❤️ Top 5 — الأكثر صحة (HP)</h4>
-                    <ul id="demo-top-hp" class="demo-list"></ul>
-                </div>
-                <div class="demo-section">
-                    <h4 class="demo-title">🧬 Top 5 — الأكثر ذكاءً (Intelligence)</h4>
-                    <ul id="demo-top-intelligence" class="demo-list"></ul>
-                </div>
-                <div class="demo-section">
-                    <h4 class="demo-title">🛡️ Top 5 — الأكثر شجاعة (Courage)</h4>
-                    <ul id="demo-top-courage" class="demo-list"></ul>
-                </div>
-                <div class="demo-section">
-                    <h4 class="demo-title">👶 Top 5 — الأكثر خصوبة (Fertility)</h4>
-                    <ul id="demo-top-fertility" class="demo-list"></ul>
-                </div>
+                <div class="demo-section"><h4 class="demo-title">🏆 Top 5 — Richest</h4><ul id="demo-top-money" class="demo-list"></ul></div>
+                <div class="demo-section"><h4 class="demo-title">❤️ Top 5 — Healthiest</h4><ul id="demo-top-hp" class="demo-list"></ul></div>
+                <div class="demo-section"><h4 class="demo-title">🧬 Top 5 — Smartest</h4><ul id="demo-top-intelligence" class="demo-list"></ul></div>
+                <div class="demo-section"><h4 class="demo-title">🛡️ Top 5 — Bravest</h4><ul id="demo-top-courage" class="demo-list"></ul></div>
+                <div class="demo-section"><h4 class="demo-title">👶 Top 5 — Most Fertile</h4><ul id="demo-top-fertility" class="demo-list"></ul></div>
             </div>
 
-            <!-- ===== TAB 3: GOD MODE ===== -->
             <div id="tab-godmode" class="tab-panel">
                 <div class="god-section collapsible-section">
-                    <h4 class="god-title section-toggle" data-target="sec-weather">🌤️ التحكم في الطقس ▾</h4>
+                    <h4 class="god-title section-toggle" data-target="sec-weather">🌤️ Weather ▾</h4>
                     <div id="sec-weather" class="section-content">
                         <div class="god-btn-row">
                             <button class="god-btn weather-btn" data-weather="clear">☀️ Clear</button>
@@ -208,9 +138,8 @@
                         </div>
                     </div>
                 </div>
-
                 <div class="god-section collapsible-section">
-                    <h4 class="god-title section-toggle" data-target="sec-seasons">🌱 التحكم في الفصول ▾</h4>
+                    <h4 class="god-title section-toggle" data-target="sec-seasons">🌱 Seasons ▾</h4>
                     <div id="sec-seasons" class="section-content">
                         <div class="god-btn-row">
                             <button class="god-btn season-btn" data-season="spring">🌱 Spring</button>
@@ -220,86 +149,61 @@
                         </div>
                     </div>
                 </div>
-
                 <div class="god-section collapsible-section">
                     <h4 class="god-title section-toggle" data-target="sec-tile-editor">🖌️ Tile Editor ▾</h4>
                     <div id="sec-tile-editor" class="section-content">
                         <div class="god-btn-row">
-                            <button id="tile-edit-toggle-btn" class="god-btn tile-edit-btn" title="Toggle Tile Edit Mode (click map to edit)">
-                                🖌️ Edit Tile Mode: <span id="tile-edit-status" class="status-label">OFF</span>
-                            </button>
+                            <button id="tile-edit-toggle-btn" class="god-btn tile-edit-btn">🖌️ Edit Tile Mode: <span id="tile-edit-status" class="status-label">OFF</span></button>
                         </div>
-                        <p class="god-hint" style="margin-top:8px;font-size:0.75rem;">
-                            اضغط على الزر أعلاه لتفعيل وضع تعديل الخلايا، ثم انقر على أي خلية في الخريطة لتغيير نوعها.
-                        </p>
                     </div>
                 </div>
-
                 <div class="god-section collapsible-section">
                     <h4 class="god-title section-toggle" data-target="sec-agents-edit">👤 Agent Editor ▾</h4>
                     <div id="sec-agents-edit" class="section-content">
-                        <div id="god-agent-info" class="god-label" style="margin-bottom:8px;">
-                            Selected Agent: <strong id="god-selected-agent-name">—</strong>
-                        </div>
-                        <div class="god-btn-row">
-                            <button id="god-open-edit-btn" class="god-btn" disabled style="opacity:0.5;">
-                                ✏️ Open Editor (click agent first)
-                            </button>
-                        </div>
-                        <p class="god-hint" style="margin-top:8px;font-size:0.75rem;">
-                            انقر على أي كائن في الخريطة لتحديده، ثم اضغط ✏️ لتحرير خصائصه مباشرة.
-                        </p>
+                        <div id="god-agent-info" class="god-label">Selected Agent: <strong id="god-selected-agent-name">—</strong></div>
+                        <div class="god-btn-row"><button id="god-open-edit-btn" class="god-btn" disabled>✏️ Open Editor</button></div>
                     </div>
                 </div>
-
                 <div class="god-section collapsible-section">
-                    <h4 class="god-title section-toggle" data-target="sec-global">⚡ Global Commands (أوامر شاملة) ▾</h4>
+                    <h4 class="god-title section-toggle" data-target="sec-global">⚡ Global Commands ▾</h4>
                     <div id="sec-global" class="section-content">
                         <div class="god-btn-row">
-                            <button class="god-btn danger global-cmd" data-action="kill_all" title="Kill all agents instantly">☠️ Kill All</button>
-                            <button class="god-btn success global-cmd" data-action="revive_all" title="Revive all dead agents">💚 Revive All</button>
+                            <button class="god-btn danger global-cmd" data-action="kill_all">☠️ Kill All</button>
+                            <button class="god-btn success global-cmd" data-action="revive_all">💚 Revive All</button>
                         </div>
                         <div class="god-btn-row">
-                            <button class="god-btn warn global-cmd" data-action="force_weather" data-value="rain" title="Force rain immediately">🌧️ Force Rain</button>
-                            <button class="god-btn warn global-cmd" data-action="force_season" data-value="winter" title="Force winter season">❄️ Force Winter</button>
+                            <button class="god-btn warn global-cmd" data-action="force_weather" data-value="rain">🌧️ Force Rain</button>
+                            <button class="god-btn warn global-cmd" data-action="force_season" data-value="winter">❄️ Force Winter</button>
                         </div>
                         <div class="god-btn-row">
-                            <button class="god-btn info global-cmd" data-action="fill_all_needs" title="Fill HP/Energy for everyone">❤️ Fill All Needs</button>
-                            <button class="god-btn spawn-btn global-cmd" data-action="spawn_animals" data-value="10">🐑 Spawn 10 Animals</button>
+                            <button class="god-btn info global-cmd" data-action="fill_all_needs">❤️ Fill All Needs</button>
+                            <button class="god-btn spawn-btn global-cmd" data-action="spawn_animals" data-value="10">🐑 Spawn 10</button>
                         </div>
                         <div class="god-btn-row">
-                            <button class="god-btn money global-cmd" data-action="give_money_all" data-value="500" title="Give $500 to each alive agent">💰 Give $500 All</button>
+                            <button class="god-btn money global-cmd" data-action="give_money_all" data-value="500">💰 Give $500 All</button>
                         </div>
                     </div>
                 </div>
-
                 <div class="god-section collapsible-section">
-                    <h4 class="god-title section-toggle" data-target="sec-animals">🐄 الحيوانات ▾</h4>
+                    <h4 class="god-title section-toggle" data-target="sec-animals">🐄 Animals ▾</h4>
                     <div id="sec-animals" class="section-content">
                         <div class="god-btn-row">
                             <button class="god-btn spawn-btn global-cmd" data-action="spawn_animals" data-value="1">+1</button>
                             <button class="god-btn spawn-btn global-cmd" data-action="spawn_animals" data-value="5">+5</button>
                             <button class="god-btn spawn-btn global-cmd" data-action="spawn_animals" data-value="10">+10</button>
                         </div>
-                        <div class="god-btn-row">
-                            <span class="god-label">Animals Count: <strong id="god-animals-count">0</strong></span>
-                        </div>
+                        <div class="god-btn-row"><span class="god-label">Animals: <strong id="god-animals-count">0</strong></span></div>
                     </div>
                 </div>
             </div>
 
-            <!-- سجل الأحداث الملون -->
             <div id="event-log-section">
-                <div id="event-log-header">
-                    <h3>📜 Event Log</h3>
-                    <button id="clear-log-btn" title="Clear Log">🗑️</button>
-                </div>
+                <div id="event-log-header"><h3>📜 Event Log</h3><button id="clear-log-btn">🗑️</button></div>
                 <ul id="event-log"></ul>
             </div>
-        </div>
+        </aside>
     </div>
 
-    <!-- لوحة التحكم السفلية (Playback + Speed Presets + Active State) -->
     <div id="control-panel">
         <div class="control-group">
             <span class="group-label">Playback</span>
@@ -316,187 +220,62 @@
         </div>
     </div>
 
-    <!-- نافذة تفاصيل الكائن (Popup) — محدثة مع Avatar + Traits ديناميكية + Edit Panel متطور -->
     <div id="agent-details-popup" class="popup">
         <div class="popup-content">
             <span class="close-button">&times;</span>
             <h3 id="detail-title">👤 Agent Details
-                <button id="edit-toggle-btn" class="edit-mode-btn" title="Toggle Edit Mode">✏️</button>
-                <button id="edit-save-btn" class="edit-save-btn" style="display:none" title="Save Changes">💾 Save</button>
-                <button id="edit-cancel-btn" class="edit-cancel-btn" style="display:none" title="Cancel Changes">❌ Cancel</button>
+                <button id="edit-toggle-btn" class="edit-mode-btn">✏️</button>
+                <button id="edit-save-btn" class="edit-save-btn" style="display:none">💾 Save</button>
+                <button id="edit-cancel-btn" class="edit-cancel-btn" style="display:none">❌ Cancel</button>
             </h3>
-
             <div class="detail-header">
                 <div class="avatar-circle" id="detail-avatar">?</div>
                 <div class="basic-info">
-                    <p class="name-line">
-                        <strong id="detail-name">-</strong>
-                        <span id="detail-gender-badge" class="gender-badge">-</span>
-                    </p>
-                    <p class="sub-line">
-                        Age: <span id="detail-age">-</span> ·
-                        State: <span id="detail-state-badge" class="state-badge">-</span>
-                        <select id="edit-state" class="edit-input edit-select" style="display:none">
-                            <option value="idle">😴 Idle</option>
-                            <option value="walking">🚶 Walking</option>
-                            <option value="eating">🍕 Eating</option>
-                            <option value="sleeping">💤 Sleeping</option>
-                            <option value="farming">🌾 Farming</option>
-                            <option value="pregnant">🤰 Pregnant</option>
-                            <option value="dead">💀 Dead</option>
-                        </select>
-                    </p>
+                    <p class="name-line"><strong id="detail-name">-</strong> <span id="detail-gender-badge" class="gender-badge">-</span></p>
+                    <p class="sub-line">Age: <span id="detail-age">-</span> · State: <span id="detail-state-badge" class="state-badge">-</span></p>
                 </div>
             </div>
-
             <div class="stats-section">
-                <div class="stat-bar">
-                    <span class="stat-label">❤️ HP</span>
-                    <div class="bar-container"><div id="detail-hp" class="bar bar-hp"></div></div>
-                    <span class="stat-num" id="detail-hp-num">0%</span>
-                    <div class="edit-field-wrap" style="display:none">
-                        <input type="range" id="edit-hp-range" class="edit-range range-hp" min="0" max="100" step="1" value="0">
-                        <input type="number" id="edit-hp" class="edit-input stat-edit" min="0" max="100" step="1">
-                    </div>
-                </div>
-                <div class="stat-bar">
-                    <span class="stat-label">🍕 Hunger</span>
-                    <div class="bar-container"><div id="detail-hunger" class="bar bar-hunger"></div></div>
-                    <span class="stat-num" id="detail-hunger-num">0%</span>
-                    <div class="edit-field-wrap" style="display:none">
-                        <input type="range" id="edit-hunger-range" class="edit-range range-hunger" min="0" max="100" step="1" value="0">
-                        <input type="number" id="edit-hunger" class="edit-input stat-edit" min="0" max="100" step="1">
-                    </div>
-                </div>
-                <div class="stat-bar">
-                    <span class="stat-label">⚡ Energy</span>
-                    <div class="bar-container"><div id="detail-energy" class="bar bar-energy"></div></div>
-                    <span class="stat-num" id="detail-energy-num">0%</span>
-                    <div class="edit-field-wrap" style="display:none">
-                        <input type="range" id="edit-energy-range" class="edit-range range-energy" min="0" max="100" step="1" value="0">
-                        <input type="number" id="edit-energy" class="edit-input stat-edit" min="0" max="100" step="1">
-                    </div>
-                </div>
-                <div class="stat-bar">
-                    <span class="stat-label">😊 Mood</span>
-                    <div class="bar-container"><div id="detail-mood" class="bar bar-mood"></div></div>
-                    <span class="stat-num" id="detail-mood-num">0%</span>
-                    <div class="edit-field-wrap" style="display:none">
-                        <input type="range" id="edit-mood-range" class="edit-range range-mood" min="-100" max="100" step="1" value="0">
-                        <input type="number" id="edit-mood" class="edit-input stat-edit" min="-100" max="100" step="1">
-                    </div>
-                </div>
-                <div class="stat-bar" id="money-bar-row">
-                    <span class="stat-label">💰 Money</span>
-                    <div class="bar-container" style="opacity:0.4"><div class="bar" style="width:50%;background:linear-gradient(90deg,#f59e0b,#fbbf24)"></div></div>
-                    <span class="stat-num" id="detail-money-stat">0</span>
-                    <div class="edit-field-wrap" style="display:none">
-                        <input type="number" id="edit-money" class="edit-input stat-edit" min="0" step="0.01">
-                    </div>
-                </div>
+                <div class="stat-bar"><span class="stat-label">❤️ HP</span><div class="bar-container"><div id="detail-hp" class="bar bar-hp"></div></div><span class="stat-num" id="detail-hp-num">0%</span></div>
+                <div class="stat-bar"><span class="stat-label">🍕 Hunger</span><div class="bar-container"><div id="detail-hunger" class="bar bar-hunger"></div></div><span class="stat-num" id="detail-hunger-num">0%</span></div>
+                <div class="stat-bar"><span class="stat-label">⚡ Energy</span><div class="bar-container"><div id="detail-energy" class="bar bar-energy"></div></div><span class="stat-num" id="detail-energy-num">0%</span></div>
+                <div class="stat-bar"><span class="stat-label">😊 Mood</span><div class="bar-container"><div id="detail-mood" class="bar bar-mood"></div></div><span class="stat-num" id="detail-mood-num">0%</span></div>
+                <div class="stat-bar" id="money-bar-row"><span class="stat-label">💰 Money</span><div class="bar-container" style="opacity:0.4"><div class="bar" style="width:50%;background:linear-gradient(90deg,#f59e0b,#fbbf24)"></div></div><span class="stat-num" id="detail-money-stat">0</span></div>
             </div>
-
-            <div class="traits-section">
-                <h4>🧬 Traits</h4>
-                <div class="traits-grid" id="detail-traits">
-                    <!-- سيتم ملؤها ديناميكياً من main.js عبر Object.entries(a.traits).forEach -->
-                </div>
-            </div>
-
-            <div class="inventory-section">
-                <h4>🎒 Inventory</h4>
-                <div class="inventory-list">
-                    <span>🌾 Wheat: <strong id="detail-wheat">0</strong></span>
-                    <span>🪵 Wood: <strong id="detail-wood">0</strong></span>
-                    <span>🪨 Stone: <strong id="detail-stone">0</strong></span>
-                    <span>💰 Money: <strong id="detail-money">0</strong></span>
-                </div>
-            </div>
-
-            <div class="relations-section">
-                <h4>❤️ Relationships</h4>
-                <p id="detail-relationships" class="relations-list">None</p>
-            </div>
+            <div class="traits-section"><h4>🧬 Traits</h4><div class="traits-grid" id="detail-traits"></div></div>
+            <div class="inventory-section"><h4>🎒 Inventory</h4><div class="inventory-list"><span>🌾 Wheat: <strong id="detail-wheat">0</strong></span><span>🪵 Wood: <strong id="detail-wood">0</strong></span><span>🪨 Stone: <strong id="detail-stone">0</strong></span><span>💰 Money: <strong id="detail-money">0</strong></span></div></div>
+            <div class="relations-section"><h4>❤️ Relationships</h4><p id="detail-relationships" class="relations-list">None</p></div>
         </div>
     </div>
 
-    <!-- ===== نافذة تعديل الخلية (Tile Editor Popup) ===== -->
     <div id="tile-editor-popup" class="popup tile-popup">
         <div class="popup-content tile-popup-content">
             <span class="close-button tile-close">&times;</span>
             <h3>🖌️ Edit Tile — (<span id="tile-pos-x">0</span>, <span id="tile-pos-y">0</span>)</h3>
-            <p class="tile-current-info">
-                Current: <strong id="tile-current-type">Plains</strong>
-                <span id="tile-current-growth" style="margin-left:12px;opacity:0.8;"></span>
-            </p>
-
+            <p class="tile-current-info">Current: <strong id="tile-current-type">Plains</strong> <span id="tile-current-growth" style="margin-left:12px;opacity:0.8;"></span></p>
             <div class="tile-type-grid">
-                <button class="tile-type-btn active" data-type="0" title="Plains / Grass">
-                    <span class="tile-icon plains-icon"></span>
-                    <span>🌿 Plains</span>
-                </button>
-                <button class="tile-type-btn" data-type="1" title="Water">
-                    <span class="tile-icon water-icon"></span>
-                    <span>💧 Water</span>
-                </button>
-                <button class="tile-type-btn" data-type="2" title="Farmland">
-                    <span class="tile-icon farm-icon"></span>
-                    <span>🌾 Farmland</span>
-                </button>
-                <button class="tile-type-btn" data-type="3" title="Forest">
-                    <span class="tile-icon forest-icon"></span>
-                    <span>🌲 Forest</span>
-                </button>
-                <button class="tile-type-btn" data-type="4" title="Desert">
-                    <span class="tile-icon desert-icon"></span>
-                    <span>🏜️ Desert</span>
-                </button>
-                <button class="tile-type-btn" data-type="5" title="Snow">
-                    <span class="tile-icon snow-icon"></span>
-                    <span>❄️ Snow</span>
-                </button>
-                <button class="tile-type-btn" data-type="6" title="Swamp">
-                    <span class="tile-icon swamp-icon"></span>
-                    <span>🌫️ Swamp</span>
-                </button>
+                <button class="tile-type-btn active" data-type="0"><span class="tile-icon plains-icon"></span><span>🌿 Plains</span></button>
+                <button class="tile-type-btn" data-type="1"><span class="tile-icon water-icon"></span><span>💧 Water</span></button>
+                <button class="tile-type-btn" data-type="2"><span class="tile-icon farm-icon"></span><span>🌾 Farmland</span></button>
+                <button class="tile-type-btn" data-type="3"><span class="tile-icon forest-icon"></span><span>🌲 Forest</span></button>
+                <button class="tile-type-btn" data-type="4"><span class="tile-icon desert-icon"></span><span>🏜️ Desert</span></button>
+                <button class="tile-type-btn" data-type="5"><span class="tile-icon snow-icon"></span><span>❄️ Snow</span></button>
+                <button class="tile-type-btn" data-type="6"><span class="tile-icon swamp-icon"></span><span>🌫️ Swamp</span></button>
             </div>
-
-            <div class="tile-growth-row" id="tile-growth-row" style="display:none;">
-                <label class="stat-label">🌱 Crop Growth:</label>
-                <input type="range" id="tile-growth-range" min="0" max="1" step="0.01" value="0">
-                <span id="tile-growth-val" class="stat-num">0%</span>
-            </div>
-
-            <div class="tile-actions-row">
-                <button id="tile-apply-btn" class="god-btn success" style="flex:1;">💾 Apply Change</button>
-                <button id="tile-cancel-btn" class="god-btn warn" style="flex:1;">❌ Cancel</button>
-            </div>
+            <div class="tile-growth-row" id="tile-growth-row" style="display:none;"><label class="stat-label">🌱 Crop Growth:</label><input type="range" id="tile-growth-range" min="0" max="1" step="0.01" value="0"><span id="tile-growth-val" class="stat-num">0%</span></div>
+            <div class="tile-actions-row"><button id="tile-apply-btn" class="god-btn success" style="flex:1;">💾 Apply</button><button id="tile-cancel-btn" class="god-btn warn" style="flex:1;">❌ Cancel</button></div>
         </div>
     </div>
 
-    <!-- =============== MOBILE BOTTOM NAVIGATION =============== -->
     <nav id="mobile-nav" class="mobile-nav" aria-label="Mobile navigation">
         <div class="mobile-nav-inner">
-            <button class="nav-btn active" data-tab="overview" aria-label="Overview">
-                <span class="nav-icon">📊</span>
-                <span class="nav-label">Overview</span>
-            </button>
-            <button class="nav-btn" data-tab="demographics" aria-label="People">
-                <span class="nav-icon">👥</span>
-                <span class="nav-label">People</span>
-            </button>
-            <button class="nav-btn" data-tab="environment" aria-label="World">
-                <span class="nav-icon">🌦️</span>
-                <span class="nav-label">World</span>
-            </button>
-            <button class="nav-btn" data-tab="godmode" aria-label="God Mode">
-                <span class="nav-icon">⚙️</span>
-                <span class="nav-label">God</span>
-            </button>
+            <button class="nav-btn active" data-tab="overview" aria-label="Overview"><span class="nav-icon">📊</span><span class="nav-label">Overview</span></button>
+            <button class="nav-btn" data-tab="demographics" aria-label="People"><span class="nav-icon">👥</span><span class="nav-label">People</span></button>
+            <button class="nav-btn" data-tab="environment" aria-label="World"><span class="nav-icon">🌦️</span><span class="nav-label">World</span></button>
+            <button class="nav-btn" data-tab="godmode" aria-label="God Mode"><span class="nav-icon">⚙️</span><span class="nav-label">God</span></button>
         </div>
     </nav>
 
-    <!-- الملف الرئيسي للمنطق (6 Managers داخله) -->
     <script src="main.js"></script>
 </body>
 </html>
