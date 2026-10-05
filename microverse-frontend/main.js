@@ -47,12 +47,19 @@ const app = new PIXI.Application({
     backgroundColor: 0x06120b,
     antialias: true,
 });
-document.getElementById('game-container').appendChild(app.view);
-app.view.style.zIndex = '1'; // ✅ ضمان الظهور فوق الخلفية
+const container = document.getElementById('game-container');
+if (!container) throw new Error("FATAL: #game-container not found in DOM");
+app.view.style.display = 'block';
+app.view.style.zIndex = '1';
+app.view.style.position = 'relative';
+container.appendChild(app.view);
 
 // WorldContainer يحتوي على كل شيء (يلتف حوله Zoom/Pan/Shake)
 const worldContainer = new PIXI.Container();
 app.stage.addChild(worldContainer);
+
+// مستطيل اختبار أحمر
+const testRect = new PIXI.Graphics(); testRect.beginFill(0xff0000); testRect.drawRect(0,0,100,100); testRect.endFill(); worldContainer.addChild(testRect);
 
 // طبقات Render (من الأسفل إلى الأعلى)
 const mapBaseContainer = new PIXI.Container();        // ألوان التايلات الأساسية + borders
@@ -1345,38 +1352,78 @@ function updateEnvironmentPerFrame(delta, globalTime) {
 // ============================================================
 function updateDashboardCards() {
     const all = Array.from(agentsCache.values());
-    document.getElementById('current-tick').textContent = currentTick;
 
     const total = all.length;
     const males = all.filter(a => a.gender === 'male').length;
     const females = total - males;
-    document.getElementById('agent-count').textContent = total;
-    document.getElementById('male-count').textContent = males;
-    document.getElementById('female-count').textContent = females;
+    const totalEl = document.getElementById('total-count');
+    if (totalEl) totalEl.textContent = total;
+    const maleEl = document.getElementById('male-count');
+    if (maleEl) maleEl.textContent = males;
+    const femaleEl = document.getElementById('female-count');
+    if (femaleEl) femaleEl.textContent = females;
 
+    const alive = all.filter(a => a.state !== 'dead').length;
     const dead = all.filter(a => a.state === 'dead').length;
-    document.getElementById('alive-count').textContent = total - dead;
-    document.getElementById('dead-count').textContent = dead;
+    const aliveEl = document.getElementById('alive-count');
+    if (aliveEl) aliveEl.textContent = alive;
+    const deadEl = document.getElementById('dead-count');
+    if (deadEl) deadEl.textContent = dead;
 
-    const stateCounts = {};
-    all.forEach(a => { const s = a.state || 'idle'; stateCounts[s] = (stateCounts[s] || 0) + 1; });
-    const stateLabel = Object.entries(stateCounts)
-        .filter(([,c]) => c>0)
-        .sort((a,b)=>b[1]-a[1])
-        .map(([s,c])=>`${s}:${c}`).join(' · ');
-    document.getElementById('states-list').textContent = stateLabel || '-';
-
-    let wheat = 0, wood = 0, stone = 0;
+    const states = { sleeping:0, eating:0, farming:0, walking:0, idle:0 };
+    let pregnant = 0;
     all.forEach(a => {
-        const i = a.inventory || {};
-        wheat += (i.wheat || 0); wood += (i.wood || 0); stone += (i.stone || 0);
+        const s = a.state || 'idle';
+        if (states[s] !== undefined) states[s]++;
+        if (a.gender === 'female' && ((a.pregnant_ticks && a.pregnant_ticks > 0) || s === 'pregnant')) pregnant++;
     });
-    document.getElementById('wheat-total').textContent = wheat;
-    document.getElementById('wood-total').textContent = wood;
-    document.getElementById('stone-total').textContent = stone;
+    const stateSleepingEl = document.getElementById('state-sleeping');
+    if (stateSleepingEl) stateSleepingEl.textContent = states.sleeping;
+    const stateEatingEl = document.getElementById('state-eating');
+    if (stateEatingEl) stateEatingEl.textContent = states.eating;
+    const stateFarmingEl = document.getElementById('state-farming');
+    if (stateFarmingEl) stateFarmingEl.textContent = states.farming;
+    const stateWalkingEl = document.getElementById('state-walking');
+    if (stateWalkingEl) stateWalkingEl.textContent = states.walking;
 
-    const pregnant = all.filter(a => (a.pregnant_ticks && a.pregnant_ticks > 0) || a.state === 'pregnant').length;
-    document.getElementById('pregnant-count').textContent = pregnant;
+    const pregnantEl = document.getElementById('pregnant-count');
+    if (pregnantEl) pregnantEl.textContent = pregnant;
+
+    let wheat = 0, wood = 0, stone = 0, money = 0;
+    all.forEach(a => {
+        const inv = a.inventory || {};
+        wheat += (inv.wheat || 0);
+        wood += (inv.wood || 0);
+        stone += (inv.stone || 0);
+        money += (a.money || 0);
+    });
+    const wheatEl = document.getElementById('wheat-total');
+    if (wheatEl) wheatEl.textContent = wheat;
+    const woodEl = document.getElementById('wood-total');
+    if (woodEl) woodEl.textContent = wood;
+    const stoneEl = document.getElementById('stone-total');
+    if (stoneEl) stoneEl.textContent = stone;
+    const moneyEl = document.getElementById('money-total');
+    if (moneyEl) moneyEl.textContent = money.toFixed(1);
+
+    const seasonEl = document.getElementById('season-val');
+    if (seasonEl) {
+        const sCap = currentSeason ? currentSeason.charAt(0).toUpperCase() + currentSeason.slice(1) : 'Spring';
+        seasonEl.textContent = sCap;
+    }
+    const weatherEl = document.getElementById('weather-val');
+    if (weatherEl) {
+        const wCap = currentWeather ? currentWeather.charAt(0).toUpperCase() + currentWeather.slice(1) : 'Clear';
+        weatherEl.textContent = wCap;
+    }
+    const wheatPriceEl = document.getElementById('wheat-price');
+    if (wheatPriceEl) {
+        const aliveAgents = all.filter(a => a.state !== 'dead').length;
+        const supplyFactor = wheat > 0 ? Math.min(2, 50 / Math.max(1, wheat)) : 2.0;
+        const demandFactor = aliveAgents > 0 ? Math.min(1.5, aliveAgents / 10) : 1.0;
+        const price = (1.0 * supplyFactor * demandFactor).toFixed(2);
+        wheatPriceEl.textContent = price;
+    }
 }
 
 function addEventToLog(ev) {

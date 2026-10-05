@@ -221,15 +221,35 @@ def run_agent_ai(agent: "AgentSchema", grid, grid_size, tick, all_agents) -> lis
     
     # ✅ GUARD 1: إذا ميت، ارجع فارغاً فوراً 
     if agent.state == "dead":
-        return events
+        return [] # توقف فوري، لا حركة، لا أكل، لا حوار 
         
     # ✅ GUARD 2: فحص الموت بالنقص في HP 
     if agent.hp <= 0:
         agent.state = "dead"
-        events.append(EventItem(tick=tick, agent_id=agent.id, type="death", text=f"{agent.name} died"))
-        return events # ارجع فوراً، لا تنفذ حركة أو أكل 
+        return [EventItem(tick=tick, agent_id=agent.id, type="death", text=f"{agent.name} died")] 
         
     # ... بقية الكود القديم (Sleep, Eat, Move...)
+
+    # ⭐ Realism: زيادة العمر كل tick!
+    agent.age += 1
+    hp_cap = _max_hp_for_age(agent.age)
+    # clamp HP الحالي إلى hp_cap إذا تجاوزه
+    if agent.hp > hp_cap:
+        agent.hp = hp_cap
+
+    # ⭐ الموت الطبيعي: إذا العمر > 50000، احتمال يزداد تدريجياً
+    if agent.age > 50000:
+        age_above = agent.age - 50000
+        death_prob = min(0.005, age_above / 10_000_000)
+        if random.random() < death_prob:
+            agent.state = "dead"
+            agent.hp = 0.0
+            events.append(EventItem(
+                tick=tick, agent_id=agent.id, type="death",
+                text=f"Agent {agent.id} ({agent.name}) died of old age (age={agent.age})",
+                payload={"agent_id": agent.id, "name": agent.name, "cause": "old_age", "age": agent.age},
+            ))
+            return events
 
     agent.last_decision_tick = tick
 

@@ -528,6 +528,39 @@ html, body {
     border-radius: 5px;
 }
 
+/* ====== DASHBOARD EXPANDED — 20+ METRICS ====== */
+.dashboard-grid {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 8px;
+  padding: 12px;
+}
+.dashboard-grid .stat-card {
+  background: rgba(255,255,255,0.05);
+  border: 1px solid rgba(255,255,255,0.1);
+  border-radius: 8px;
+  padding: 10px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+}
+.dashboard-grid .stat-card .label { 
+  font-size: 0.75rem; 
+  color: #8f9bb6; 
+  text-transform: uppercase; 
+  font-weight: 700;
+  letter-spacing: 0.4px;
+}
+.dashboard-grid .stat-card .value { 
+  font-size: 1.1rem; 
+  font-weight: 700; 
+  color: #e8eef7; 
+  margin-top: 4px; 
+}
+.dashboard-grid .stat-card .value.alive { color: #10b981; }
+.dashboard-grid .stat-card .value.dead  { color: #ef4444; }
+
 /* ====== EVENT LOG (ملون حسب نوع الحدث) ====== */
 #event-log-section {
     flex: 1;
