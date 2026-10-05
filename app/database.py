@@ -33,12 +33,20 @@ async def create_tables() -> None:
     async with engine.begin() as conn:
         await conn.run_sync(Base.metadata.create_all)
         try:
+            # SQLite check
             rows = await conn.execute(text("PRAGMA table_info(world_state)"))
             cols = {row[1] for row in rows.fetchall()}
             if "animals_json" not in cols:
                 await conn.execute(text("ALTER TABLE world_state ADD COLUMN animals_json JSON NOT NULL DEFAULT '{}'"))
         except Exception:
-            pass 
+            pass
+        # PostgreSQL check
+        try:
+            result = await conn.execute(text("SELECT column_name FROM information_schema.columns WHERE table_name='world_state' AND column_name='animals_json'"))
+            if not result.fetchone():
+                await conn.execute(text("ALTER TABLE world_state ADD COLUMN animals_json JSON NOT NULL DEFAULT '{}'::json"))
+        except Exception:
+            pass
 
 async def get_db() -> AsyncGenerator[AsyncSession, None]: 
     factory = get_session_factory() 
