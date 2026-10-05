@@ -59,7 +59,15 @@
   - URL: https://github.com/mnidaleddin-hub/microverse/commit/a6600ac
 
 ## 🚀 الخطوات التالية 
-- المرحلة 7: (TBD — بعد إنهاء المرحلة 6)
+- المرحلة 8: (TBD — بعد إنهاء المرحلة 7)
+
+## ⏳ المهام الجارية (المرحلة 7/10) — Phase 7: Responsive + Mobile + Touch Controls
+- [ ] أ. Responsive Design: Media Queries لـ 4 Breakpoints (Desktop/Tablet/Mobile-Landscape/Mobile-Portrait) + زر ☰ Sidebar Toggle + Bottom Tab Bar في `style.css`
+- [ ] ب. HTML: إضافة زر `#sidebar-toggle` و `<nav id="mobile-nav">` بـ 4 أزرار (Overview / People / World / God) في `index.html`
+- [ ] ج. Touch Controls: Pinch-to-Zoom + Swipe-to-Pan + Tap-to-Select + Double-Tap-to-Center في `main.js`
+- [ ] د. Mobile Dashboard: Bottom Navigation logic + Tab Sync مع الـ Sidebar Tabs + Sidebar Toggle في `main.js`
+- [ ] هـ. Performance Guards: `isMobile` detection + Particle Reduction (Rain/Snow/Leaves) + resolution=1 على الموبايل + Minimap Interval 15→30 ticks + FPS Monitor Console في `main.js`
+- [ ] و. بروتوكول الإغلاق: compileall (exit 0) + اختلافات Desktop 1920x1080 / 1024x768 / iPhone 12 Pro (390x844) DevTools Mobile mode + Pinch Zoom/Swipe Pan/Tap Select/Double Tap Center + Git Push + SHA
 
 ## ✅ المرحلة 6/10 مكتملة — Phase 6: Real-time God Mode Editor
 - [x] أ. Backend Schemas: إضافة `EditAgentRequest`, `EditTileRequest`, `GodModeCommand` في `app/schemas.py`

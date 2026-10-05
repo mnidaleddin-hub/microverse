@@ -1553,21 +1553,247 @@ html, body {
 }
 
 /* ============================================================
-   15. RESPONSIVE (تكييف بسيط لو كانت الشاشة أصغر)
+   15. SIDEBAR TOGGLE (HAMBURGER) + OVERLAY
    ============================================================ */
-@media (max-width: 1300px) {
-    #sidebar { max-width: none; }
-    #game-container { width: 600px; height: 600px; }
+#sidebar-toggle {
+    display: none;
+    position: fixed;
+    top: 16px;
+    right: 16px;
+    z-index: 120;
+    padding: 10px 14px;
+    gap: 8px;
+    border-radius: 12px;
+    background: var(--bg-floating);
+    backdrop-filter: blur(14px);
+    border: 1px solid var(--border-strong);
+    color: var(--text-primary);
+    box-shadow: 0 6px 20px rgba(0,0,0,0.35);
+}
+#sidebar-toggle .tool-icon { font-size: 1.2rem; line-height: 1; }
+
+#sidebar-backdrop {
+    display: none;
+    position: fixed;
+    inset: 0;
+    background: rgba(0,0,0,0.55);
+    backdrop-filter: blur(3px);
+    z-index: 90;
+    opacity: 0;
+    transition: opacity 0.25s ease;
+}
+#sidebar-backdrop.visible {
+    display: block;
+    opacity: 1;
 }
 
-@media (max-width: 1100px) {
+/* ============================================================
+   16. MOBILE BOTTOM NAVIGATION
+   ============================================================ */
+.mobile-nav {
+    display: none;
+    position: fixed;
+    bottom: 0;
+    left: 0;
+    right: 0;
+    background: linear-gradient(180deg, var(--bg-secondary), var(--bg-primary));
+    border-top: 1px solid var(--border-color);
+    padding: 8px 0 calc(8px + env(safe-area-inset-bottom));
+    z-index: 60;
+    box-shadow: 0 -6px 22px rgba(0,0,0,0.4);
+}
+.mobile-nav-inner {
+    display: flex;
+    justify-content: space-around;
+    align-items: stretch;
+    width: 100%;
+    max-width: 768px;
+    margin: 0 auto;
+}
+.nav-btn {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 4px;
+    padding: 8px 14px;
+    min-width: 64px;
+    background: transparent;
+    border: none;
+    color: var(--text-secondary);
+    cursor: pointer;
+    border-radius: 10px;
+    transition: all 0.18s ease;
+    -webkit-tap-highlight-color: transparent;
+}
+.nav-btn:active { transform: scale(0.94); }
+.nav-btn.active {
+    color: var(--accent-blue);
+    background: rgba(59, 130, 246, 0.12);
+}
+.nav-icon { font-size: 1.3rem; line-height: 1; }
+.nav-label { font-size: 0.7rem; font-weight: 700; letter-spacing: 0.3px; }
+
+/* ============================================================
+   17. RESPONSIVE BREAKPOINTS (احترافي — 4 أحجام)
+   ============================================================ */
+
+/* ---- 17A. TABLET (max-width: 1300px) — Collapsible Right Drawer ---- */
+@media (max-width: 1300px) and (min-width: 769px) {
+    #sidebar-toggle { display: inline-flex; }
+
+    #app { padding: 10px; gap: 10px; }
+    #game-wrapper { flex-grow: 1; align-items: center; justify-content: center; }
+    #game-container {
+        width: min(100%, 620px);
+        height: min(620px, calc(100vh - 140px));
+    }
+
+    #sidebar {
+        position: fixed;
+        right: 0;
+        top: 0;
+        height: 100vh;
+        width: min(400px, 88vw);
+        min-width: 0;
+        max-width: none;
+        border-radius: 14px 0 0 14px;
+        transform: translateX(102%);
+        transition: transform 0.32s cubic-bezier(0.22, 1, 0.36, 1);
+        z-index: 100;
+        box-shadow: -12px 0 40px rgba(0,0,0,0.5);
+    }
+    #sidebar.open { transform: translateX(0); }
+}
+
+/* ---- 17B. MOBILE LANDSCAPE (max-width: 768px) + MOBILE PORTRAIT ---- */
+@media (max-width: 768px) {
+    html, body { overflow: hidden; }
+
+    #sidebar-toggle {
+        display: inline-flex;
+        top: 12px;
+        right: 12px;
+        padding: 8px 10px;
+        border-radius: 10px;
+    }
+    #sidebar-toggle .tool-text { display: none; }
+
+    .mobile-nav { display: block; }
+
     #app {
         flex-direction: column;
-        overflow: auto;
-        height: auto;
-        min-height: 100vh;
+        padding: 8px 8px 0 8px;
+        gap: 8px;
+        height: 100vh;
+        height: 100dvh;
+        overflow: hidden;
     }
-    #game-wrapper { align-items: center; }
-    #sidebar { max-width: none; min-height: 500px; }
-    html, body { overflow: auto; }
+
+    #game-wrapper {
+        flex-grow: 1;
+        width: 100%;
+        align-items: stretch;
+        justify-content: stretch;
+        gap: 6px;
+        padding-bottom: 72px;
+    }
+
+    #game-header {
+        padding: 10px 12px;
+        border-radius: 10px;
+    }
+    #game-header h1 { font-size: 1.05rem; }
+    #header-tools .tool-btn:not(.keep-mobile) { display: none; }
+    .header-divider { display: none; }
+
+    #game-container {
+        width: 100%;
+        flex-grow: 1;
+        height: auto;
+        border-radius: 10px;
+    }
+
+    #zoom-controls { padding: 6px; gap: 4px; }
+    #zoom-controls button { width: 32px; height: 32px; font-size: 1rem; }
+    #minimap-container {
+        left: 8px;
+        bottom: 8px;
+        padding: 6px;
+        transform: scale(0.9);
+        transform-origin: bottom left;
+    }
+
+    /* --- Sidebar as Bottom Sheet (Mobile Landscape) --- */
+    #sidebar {
+        position: fixed;
+        left: 0;
+        right: 0;
+        bottom: 60px;
+        bottom: calc(60px + env(safe-area-inset-bottom));
+        height: calc(100vh - 120px);
+        height: calc(100dvh - 120px);
+        width: 100%;
+        min-width: 0;
+        max-width: none;
+        flex-grow: 0;
+        border-radius: 18px 18px 0 0;
+        transform: translateY(102%);
+        transition: transform 0.32s cubic-bezier(0.22, 1, 0.36, 1);
+        z-index: 95;
+        box-shadow: 0 -10px 40px rgba(0,0,0,0.55);
+    }
+    #sidebar.open { transform: translateY(0); }
+}
+
+/* ---- 17C. MOBILE PORTRAIT (max-width: 480px) — Sidebar as Right Drawer ---- */
+@media (max-width: 480px) {
+    #sidebar {
+        left: auto;
+        right: 0;
+        top: 0;
+        bottom: 0;
+        width: 86vw;
+        height: 100vh;
+        height: 100dvh;
+        border-radius: 0;
+        transform: translateX(102%);
+    }
+    #sidebar.open { transform: translateX(0); }
+
+    #game-header { padding: 10px 10px; }
+    #game-header h1 { font-size: 0.95rem; }
+    .header-badge { font-size: 0.65rem; padding: 1px 6px; }
+
+    #minimap-container { display: none; }
+    .tile-type-grid { grid-template-columns: repeat(3, 1fr); }
+}
+
+/* ============================================================
+   18. MOBILE TOUCH FRIENDLY TWEAKS
+   ============================================================ */
+@media (hover: none) and (pointer: coarse) {
+    .tool-btn,
+    .nav-btn,
+    #zoom-controls button,
+    .tab-btn,
+    .collapsible-header,
+    .god-btn,
+    .tile-type-btn {
+        min-height: 44px;
+        min-width: 44px;
+    }
+    * {
+        -webkit-tap-highlight-color: transparent;
+        -webkit-touch-callout: none;
+    }
+    #game-container { cursor: default; }
+}
+
+/* Scrollbar slim on mobile */
+@media (max-width: 768px) {
+    #sidebar::-webkit-scrollbar,
+    .tab-content::-webkit-scrollbar {
+        width: 6px;
+    }
 }

@@ -36,7 +36,22 @@ const MAX_EVENT_LOG = 35;
 const DAY_LENGTH_TICKS = 1440;             // 24 in-world hours = 1 real minute @ 1x (approx)
 const STATS_BUFFER_SIZE = 60;              // 60 points in Chart.js
 
-console.log("🌍 [BOOT] Microverse v2 Frontend initializing...");
+// ===== MOBILE DETECTION + PERFORMANCE THROTTLING =====
+const isMobile = (() => {
+    if (typeof navigator === "undefined") return false;
+    const uaMatch = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent || "");
+    const smallScreen = (typeof window !== "undefined") && Math.min(window.innerWidth || 9999, window.innerHeight || 9999) <= 900;
+    const coarsePointer = (typeof window !== "undefined" && window.matchMedia) ? window.matchMedia("(pointer: coarse)").matches : false;
+    return uaMatch || smallScreen || coarsePointer;
+})();
+const PARTICLE_RAIN_COUNT    = isMobile ? 200 : 480;
+const PARTICLE_SNOW_COUNT    = isMobile ? 120 : 260;
+const PARTICLE_LEAF_COUNT    = isMobile ? 100 : 220;
+const PARTICLE_FIREFLY_COUNT = isMobile ? 150 : 300;
+const MINIMAP_INTERVAL       = isMobile ? 30  : 15;
+const _FPS_LOG = true;
+
+console.log(`🌍 [BOOT] Microverse v2 Frontend initializing... isMobile=${isMobile}`);
 
 // ============================================================
 // PIXI APPLICATION + WORLD HIERARCHY
@@ -45,7 +60,9 @@ const app = new PIXI.Application({
     width: MAP_WIDTH,
     height: MAP_HEIGHT,
     backgroundColor: 0x06120b,
-    antialias: true,
+    antialias: !isMobile,
+    resolution: isMobile ? 1 : (window.devicePixelRatio || 1),
+    autoDensity: true,
 });
 const container = document.getElementById('game-container');
 if (!container) throw new Error("FATAL: #game-container not found in DOM");
@@ -203,11 +220,12 @@ const CameraManager = (function () {
         }
     }
 
-    // ربط أحداث الـ Drag
+    // ربط أحداث الـ Drag + Touch
     function _bindPanEvents() {
         const gc = document.getElementById('game-container');
         gc.addEventListener('pointerdown', (e) => {
-            // فقط زر الأيسر
+            // فقط زر الأيسر (وليس Touch — نستخدم touch* مباشرة لـ Touch)
+            if (e.pointerType === 'touch') return;
             if (e.button !== 0) return;
             // إذا كان النقر فوق agent مباشرة فلا نبدأ Pan (الـ agent يأخذ الحدث أولاً)
             const cx = e.clientX, cy = e.clientY;
@@ -222,6 +240,7 @@ const CameraManager = (function () {
         });
         window.addEventListener('pointermove', (e) => {
             if (!isPanning) return;
+            if (e.pointerType === 'touch') return;
             // الطبقة مقلوبة بالإحداثيات بسبب pivot/zoom — نقسم على currentZoom للتعويض
             panOffsetX = panStartOffX + (panStartX - e.clientX) / currentZoom;
             panOffsetY = panStartOffY + (panStartY - e.clientY) / currentZoom;
@@ -230,9 +249,106 @@ const CameraManager = (function () {
             _applyTransform();
         });
         window.addEventListener('pointerup', (e) => {
+            if (e.pointerType === 'touch') return;
             if (!isPanning) return;
             isPanning = false;
             document.getElementById('game-container').classList.remove('panning');
+        });
+
+        // ===================== TOUCH CONTROLS =====================
+        let lastTouchDistance = 0;
+        let touchPanActive = false;
+        let touchMoved = false;
+        let lastTapTime = 0;
+
+        // ---- Pinch-to-Zoom + Swipe-to-Pan (touchstart) ----
+        gc.addEventListener('touchstart', (e) => {
+            if (e.touches.length === 2) {
+                e.preventDefault();
+                const dx = e.touches[0].clientX - e.touches[1].clientX;
+                const dy = e.touches[0].clientY - e.touches[1].clientY;
+                lastTouchDistance = Math.hypot(dx, dy);
+                touchPanActive = false;
+                touchMoved = false;
+            } else if (e.touches.length === 1) {
+                const t = e.touches[0];
+                // تأكد أن النقر فوق canvas وليس فوق زر HTML
+                const target = document.elementFromPoint(t.clientX, t.clientY);
+                if (target && target.tagName && target.tagName.toLowerCase() === 'canvas') {
+                    touchPanActive = true;
+                    touchMoved = false;
+                    isPanning = true;
+                    panStartX = t.clientX; panStartY = t.clientY;
+                    panStartOffX = panOffsetX; panStartOffY = panOffsetY;
+                    gc.classList.add('panning');
+                }
+            }
+        }, { passive: false });
+
+        // ---- Pinch Zoom + Swipe Pan (touchmove) ----
+        gc.addEventListener('touchmove', (e) => {
+            if (e.touches.length === 2) {
+                e.preventDefault();
+                touchMoved = true;
+                const dx = e.touches[0].clientX - e.touches[1].clientX;
+                const dy = e.touches[0].clientY - e.touches[1].clientY;
+                const currentDistance = Math.hypot(dx, dy);
+                if (lastTouchDistance > 0 && currentDistance > 0) {
+                    const scaleFactor = currentDistance / lastTouchDistance;
+                    const rect = gc.getBoundingClientRect();
+                    const centerClientX = (e.touches[0].clientX + e.touches[1].clientX) / 2;
+                    const centerClientY = (e.touches[0].clientY + e.touches[1].clientY) / 2;
+                    const sx = (centerClientX - rect.left) * (app.view.width / rect.width);
+                    const sy = (centerClientY - rect.top)  * (app.view.height / rect.height);
+                    zoomAt(sx, sy, scaleFactor);
+                }
+                lastTouchDistance = currentDistance;
+            } else if (e.touches.length === 1 && touchPanActive) {
+                const t = e.touches[0];
+                const dxPx = panStartX - t.clientX;
+                const dyPx = panStartY - t.clientY;
+                if (Math.abs(dxPx) > 4 || Math.abs(dyPx) > 4) touchMoved = true;
+                e.preventDefault();
+                panOffsetX = panStartOffX + dxPx / currentZoom;
+                panOffsetY = panStartOffY + dyPx / currentZoom;
+                if (followAgentId !== null) { followAgentId = null; _updateFollowButton(false); }
+                _applyTransform();
+            }
+        }, { passive: false });
+
+        // ---- Double-Tap to Center + Tap-to-Select fallback ----
+        gc.addEventListener('touchend', (e) => {
+            if (e.touches.length === 0) {
+                // Double-tap detection
+                const now = Date.now();
+                const dt = now - lastTapTime;
+                if (!touchMoved && dt < 300 && dt > 0) {
+                    centerView();
+                    console.log("🎯 [Touch] Double-tap detected → Center view");
+                    lastTapTime = 0;
+                } else if (!touchMoved) {
+                    lastTapTime = now;
+                } else {
+                    lastTapTime = 0;
+                }
+                lastTouchDistance = 0;
+                touchPanActive = false;
+                touchMoved = false;
+                isPanning = false;
+                gc.classList.remove('panning');
+            } else if (e.touches.length === 1) {
+                // رفع إصبع واحد أثناء وجود إصبع آخر → ضبط panStart لمنع ارتداد
+                const t = e.touches[0];
+                panStartX = t.clientX; panStartY = t.clientY;
+                panStartOffX = panOffsetX; panStartOffY = panOffsetY;
+            }
+        });
+        gc.addEventListener('touchcancel', () => {
+            lastTouchDistance = 0;
+            touchPanActive = false;
+            touchMoved = false;
+            isPanning = false;
+            gc.classList.remove('panning');
         });
 
         // زوايا التكبير بالأزرار + عجلة الفأرة
@@ -428,6 +544,12 @@ const SpriteFactory = (function () {
         });
         sprite.on('pointerdown', (e) => {
             e.stopPropagation();
+            _selectAgentInternal(initialData.id);
+        });
+        // دعم Touch للموبايل (Tap-to-Select) — hit area أكبر قليلاً للأصابع
+        sprite.hitArea = new PIXI.Rectangle(-22, -56, 44, 68);
+        sprite.on('touchstart', (e) => {
+            try { e.stopPropagation(); } catch (_) {}
             _selectAgentInternal(initialData.id);
         });
 
@@ -1016,11 +1138,8 @@ const DayNightManager = (function () {
 // MICRO-ADJUSTMENT C: ننشئ NASS TEXTURE موحدة لكل نوع (مُولدة على canvas).
 // ============================================================
 const WeatherManager = (function () {
-    const PARTICLE_RAIN_COUNT = 480;
-    const PARTICLE_SNOW_COUNT = 260;
-    const PARTICLE_LEAF_COUNT = 220;
-    const PARTICLE_FIREFLY_COUNT = 300;  // Bloom additive في الغابات ليلاً (max 500 pool)
-
+    // Particle counts (مستخرجة من isMobile أعلى الملف) — override إذا كان المستخدم يريد تخصيص
+    // (يتم استخدام الثوابت العالمية PARTICLE_RAIN_COUNT الخ.)
     let pcRain = null, pcSnow = null, pcLeaves = null, pcFireflies = null;
     const allParticles = { rain: [], snow: [], leaves: [], fireflies: [] };
 
@@ -1491,8 +1610,8 @@ const StatsManager = (function () {
         _minimapCounter++;
         // نضيف نقطة للـ charts كل 1 tick (لكن buffer 60 فقط)
         recordSnapshot(tick);
-        // نرسم Minimap كل 15 ticks (توفير أداء — Minimap 10-15)
-        if (_minimapCounter >= 15) {
+        // نرسم Minimap كل MINIMAP_INTERVAL ticks (توفير أداء — Mobile 30, Desktop 15)
+        if (_minimapCounter >= MINIMAP_INTERVAL) {
             _minimapCounter = 0;
             drawMinimap();
         }
@@ -2731,6 +2850,118 @@ WeatherManager.init();
 SoundManager.init();
 StatsManager.init();
 ScreenEffects.init();
+
+// ============================================================
+// SIDEBAR TOGGLE (Hamburger Button + Backdrop)
+// ============================================================
+(function _bindSidebarToggle() {
+    const toggle = document.getElementById('sidebar-toggle');
+    const sidebar = document.getElementById('sidebar');
+    const backdrop = document.getElementById('sidebar-backdrop');
+    if (!toggle || !sidebar) return;
+
+    function setSidebar(open) {
+        if (open) sidebar.classList.add('open');
+        else sidebar.classList.remove('open');
+        if (backdrop) {
+            if (open) backdrop.classList.add('visible');
+            else backdrop.classList.remove('visible');
+        }
+        SoundManager.ensureUnlocked(); SoundManager.play('click');
+        console.log(`📱 [Sidebar] ${open ? 'Opened' : 'Closed'}`);
+    }
+    toggle.addEventListener('click', (e) => {
+        e.preventDefault();
+        const open = !sidebar.classList.contains('open');
+        setSidebar(open);
+    });
+    if (backdrop) backdrop.addEventListener('click', () => setSidebar(false));
+})();
+
+// ============================================================
+// MOBILE BOTTOM NAVIGATION — Tabs Sync + Sidebar Open
+// ============================================================
+(function _bindMobileNav() {
+    const btns = document.querySelectorAll('#mobile-nav .nav-btn');
+    const sidebar = document.getElementById('sidebar');
+    const backdrop = document.getElementById('sidebar-backdrop');
+    if (btns.length === 0) return;
+
+    function _activateNav(target) {
+        btns.forEach(b => b.classList.toggle('active', b.dataset.tab === target));
+    }
+    // مزامنة مع الأزرار الأصلية في الـ Sidebar
+    document.querySelectorAll('.tab-btn').forEach(origBtn => {
+        origBtn.addEventListener('click', () => {
+            const t = origBtn.dataset.tab;
+            if (t) _activateNav(t);
+        });
+    });
+
+    btns.forEach(btn => {
+        btn.addEventListener('click', () => {
+            const tab = btn.dataset.tab;
+            _activateNav(tab);
+            // اضغط زر الـ Tab المطابق داخل الـ Sidebar
+            let clicked = false;
+            document.querySelectorAll('.tab-btn').forEach(origBtn => {
+                if (origBtn.dataset.tab === tab) {
+                    origBtn.click();
+                    clicked = true;
+                }
+            });
+            // فتح الـ Sidebar إذا كان موجوداً
+            if (sidebar) {
+                sidebar.classList.add('open');
+                if (backdrop) backdrop.classList.add('visible');
+            }
+            SoundManager.ensureUnlocked(); SoundManager.play('click');
+            console.log(`📱 [Mobile Nav] Switched to tab: ${tab} (originalBtnClicked=${clicked})`);
+        });
+    });
+})();
+
+// ============================================================
+// PIXI RENDERER RESIZE — تكييف مع حجم الـ #game-container
+// ============================================================
+(function _bindResize() {
+    window.addEventListener('resize', _resizeRenderer);
+    window.addEventListener('orientationchange', _resizeRenderer);
+    setTimeout(_resizeRenderer, 120);
+    setTimeout(_resizeRenderer, 600);
+})();
+function _resizeRenderer() {
+    const gc = document.getElementById('game-container');
+    if (!gc) return;
+    const rect = gc.getBoundingClientRect();
+    const targetW = Math.max(200, Math.floor(rect.width));
+    const targetH = Math.max(200, Math.floor(rect.height));
+    try { app.renderer.resize(targetW, targetH); } catch (_) {}
+}
+
+// ============================================================
+// FPS MONITOR (Console only — every 2s if isMobile)
+// ============================================================
+(function _fpsMonitor() {
+    if (!_FPS_LOG) return;
+    let fpsCounter = 0;
+    let lastFpsUpdate = Date.now();
+    let worstFps = 999;
+    app.ticker.add(() => {
+        fpsCounter++;
+        const now = Date.now();
+        const dt = now - lastFpsUpdate;
+        if (dt >= 2000) {
+            const fps = Math.round((fpsCounter * 1000) / dt);
+            worstFps = Math.min(worstFps, fps);
+            const isLow = isMobile ? fps < 30 : fps < 45;
+            const tag = isLow ? '⚠️' : '📊';
+            console.log(`${tag} [FPS] avg=${fps}fps  worst_min=${worstFps}fps  isMobile=${isMobile}`);
+            fpsCounter = 0;
+            lastFpsUpdate = now;
+        }
+    });
+})();
 
 // اختبار الطقس DevTools (لاختبار المرحلة 1 قبل الـ Backend)
 window.__toggleWeather = function (w, s) {
