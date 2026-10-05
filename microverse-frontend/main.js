@@ -1731,95 +1731,69 @@ function initTilemapEngine() {
 // ============================================================
 function updateDashboardCards() {
     const all = Array.from(agentsCache.values());
-
     const total = all.length;
-    const males = all.filter(a => a.gender === 'male').length;
-    const females = total - males;
-    const totalEl = document.getElementById('total-count');
-    if (totalEl) totalEl.textContent = total;
-    const maleEl = document.getElementById('male-count');
-    if (maleEl) maleEl.textContent = males;
-    const femaleEl = document.getElementById('female-count');
-    if (femaleEl) femaleEl.textContent = females;
-
     const alive = all.filter(a => a.state !== 'dead').length;
     const dead = all.filter(a => a.state === 'dead').length;
-    const aliveEl = document.getElementById('alive-count');
-    if (aliveEl) aliveEl.textContent = alive;
-    const deadEl = document.getElementById('dead-count');
-    if (deadEl) deadEl.textContent = dead;
+    const males = all.filter(a => a.gender === 'male').length;
+    const females = total - males;
+    const pregnant = all.filter(a => a.gender === 'female' && ((a.pregnant_ticks && a.pregnant_ticks > 0) || a.state === 'pregnant')).length;
 
     const states = { sleeping:0, eating:0, farming:0, walking:0, idle:0 };
-    let pregnant = 0;
-    all.forEach(a => {
-        const s = a.state || 'idle';
-        if (states[s] !== undefined) states[s]++;
-        if (a.gender === 'female' && ((a.pregnant_ticks && a.pregnant_ticks > 0) || s === 'pregnant')) pregnant++;
+    all.forEach(a => { const s = a.state || 'idle'; if (states[s] !== undefined) states[s]++; });
+
+    // Update stat cards with animation
+    const cards = [
+        { id: 'total-count', val: total, label: 'Total Agents' },
+        { id: 'alive-count', val: alive, label: 'Alive', cls: 'alive' },
+        { id: 'dead-count', val: dead, label: 'Dead', cls: 'dead' },
+        { id: 'pregnant-count', val: pregnant, label: 'Pregnant' },
+        { id: 'male-count', val: males, label: 'Males' },
+        { id: 'female-count', val: females, label: 'Females' },
+        { id: 'state-sleeping', val: states.sleeping, label: 'Sleeping' },
+        { id: 'state-eating', val: states.eating, label: 'Eating' },
+        { id: 'state-farming', val: states.farming, label: 'Farming' },
+        { id: 'state-walking', val: states.walking, label: 'Walking' },
+    ];
+    cards.forEach(c => {
+        const el = document.getElementById(c.id);
+        if (el) {
+            el.textContent = c.val;
+            if (c.cls) el.classList.add(c.cls);
+        }
     });
-    const stateSleepingEl = document.getElementById('state-sleeping');
-    if (stateSleepingEl) stateSleepingEl.textContent = states.sleeping;
-    const stateEatingEl = document.getElementById('state-eating');
-    if (stateEatingEl) stateEatingEl.textContent = states.eating;
-    const stateFarmingEl = document.getElementById('state-farming');
-    if (stateFarmingEl) stateFarmingEl.textContent = states.farming;
-    const stateWalkingEl = document.getElementById('state-walking');
-    if (stateWalkingEl) stateWalkingEl.textContent = states.walking;
 
-    const pregnantEl = document.getElementById('pregnant-count');
-    if (pregnantEl) pregnantEl.textContent = pregnant;
-
+    // Resources
     let wheat = 0, wood = 0, stone = 0, money = 0;
     let grain = 0, vegetable = 0, fruit = 0, industrial = 0, metal = 0, animal_product = 0;
     all.forEach(a => {
         const inv = a.inventory || {};
-        wheat += (inv.wheat || 0);
-        wood += (inv.wood || 0);
-        stone += (inv.stone || 0);
-        money += (a.money || 0);
-        grain += ((inv.grain || 0) + (inv.wheat || 0));
-        vegetable += (inv.vegetable || 0);
-        fruit += (inv.fruit || 0);
-        industrial += (inv.industrial || 0);
-        metal += (inv.metal || 0);
-        animal_product += (inv.animal_product || 0);
+        wheat += (inv.wheat || 0); wood += (inv.wood || 0); stone += (inv.stone || 0); money += (a.money || 0);
+        grain += ((inv.grain || 0) + (inv.wheat || 0)); vegetable += (inv.vegetable || 0); fruit += (inv.fruit || 0);
+        industrial += (inv.industrial || 0); metal += (inv.metal || 0); animal_product += (inv.animal_product || 0);
     });
-    const wheatEl = document.getElementById('wheat-total');
-    if (wheatEl) wheatEl.textContent = wheat;
-    const woodEl = document.getElementById('wood-total');
-    if (woodEl) woodEl.textContent = wood;
-    const stoneEl = document.getElementById('stone-total');
-    if (stoneEl) stoneEl.textContent = stone;
-    const moneyEl = document.getElementById('money-total');
-    if (moneyEl) moneyEl.textContent = money.toFixed(1);
+    const resCards = [
+        { id: 'wheat-total', val: wheat }, { id: 'wood-total', val: wood }, { id: 'stone-total', val: stone },
+        { id: 'money-total', val: money.toFixed(1) }, { id: 'grain-total', val: grain },
+        { id: 'vegetable-total', val: vegetable }, { id: 'fruit-total', val: fruit },
+        { id: 'industrial-total', val: industrial }, { id: 'metal-total', val: metal },
+        { id: 'animal_product-total', val: animal_product },
+    ];
+    resCards.forEach(c => { const el = document.getElementById(c.id); if (el) el.textContent = c.val; });
 
-    // 6 بطاقات موارد جديدة
-    const gEl = document.getElementById('grain-total'); if (gEl) gEl.textContent = grain;
-    const vEl = document.getElementById('vegetable-total'); if (vEl) vEl.textContent = vegetable;
-    const fEl = document.getElementById('fruit-total'); if (fEl) fEl.textContent = fruit;
-    const iEl = document.getElementById('industrial-total'); if (iEl) iEl.textContent = industrial;
-    const mEl = document.getElementById('metal-total'); if (mEl) mEl.textContent = metal;
-    const aEl = document.getElementById('animal_product-total'); if (aEl) aEl.textContent = animal_product;
-
+    // Season / Weather / Price
     const seasonEl = document.getElementById('season-val');
-    if (seasonEl) {
-        const sCap = currentSeason ? currentSeason.charAt(0).toUpperCase() + currentSeason.slice(1) : 'Spring';
-        seasonEl.textContent = sCap;
-    }
+    if (seasonEl) seasonEl.textContent = currentSeason ? currentSeason.charAt(0).toUpperCase() + currentSeason.slice(1) : 'Spring';
     const weatherEl = document.getElementById('weather-val');
-    if (weatherEl) {
-        const wCap = currentWeather ? currentWeather.charAt(0).toUpperCase() + currentWeather.slice(1) : 'Clear';
-        weatherEl.textContent = wCap;
-    }
-    const wheatPriceEl = document.getElementById('wheat-price');
-    if (wheatPriceEl) {
+    if (weatherEl) weatherEl.textContent = currentWeather ? currentWeather.charAt(0).toUpperCase() + currentWeather.slice(1) : 'Clear';
+    const priceEl = document.getElementById('wheat-price');
+    if (priceEl) {
         const aliveAgents = all.filter(a => a.state !== 'dead').length;
         const supplyFactor = wheat > 0 ? Math.min(2, 50 / Math.max(1, wheat)) : 2.0;
         const demandFactor = aliveAgents > 0 ? Math.min(1.5, aliveAgents / 10) : 1.0;
-        const price = (1.0 * supplyFactor * demandFactor).toFixed(2);
-        wheatPriceEl.textContent = price;
+        priceEl.textContent = (1.0 * supplyFactor * demandFactor).toFixed(2);
     }
 
-    // Top 5 Demographics
+    // Demographics (English labels)
     function renderTop5(ulId, arr, labelFn) {
         const ul = document.getElementById(ulId);
         if (!ul) return;
@@ -1831,26 +1805,15 @@ function updateDashboardCards() {
         });
     }
     const aliveAgents = all.filter(a => a.state !== 'dead');
-    const topMoney = [...aliveAgents].sort((a,b) => (b.money||0) - (a.money||0));
-    renderTop5('demo-top-money', topMoney, a => `<span class="demo-rank">${a.name}</span> 💰 <strong>${(a.money||0).toFixed(1)}</strong>`);
-    const topHp = [...aliveAgents].sort((a,b) => (b.hp||0) - (a.hp||0));
-    renderTop5('demo-top-hp', topHp, a => `<span class="demo-rank">${a.name}</span> ❤️ <strong>${Math.round(a.hp||0)}%</strong>`);
-    const topInt = [...aliveAgents].sort((a,b) => ((b.traits||{}).intelligence||0.5) - ((a.traits||{}).intelligence||0.5));
-    renderTop5('demo-top-intelligence', topInt, a => `<span class="demo-rank">${a.name}</span> 🧠 <strong>${Math.round(((a.traits||{}).intelligence||0.5)*100)}%</strong>`);
-    const topCourage = [...aliveAgents].sort((a,b) => ((b.traits||{}).courage||0.5) - ((a.traits||{}).courage||0.5));
-    renderTop5('demo-top-courage', topCourage, a => `<span class="demo-rank">${a.name}</span> 🛡️ <strong>${Math.round(((a.traits||{}).courage||0.5)*100)}%</strong>`);
-    const topFert = [...aliveAgents].sort((a,b) => ((b.traits||{}).fertility||0.5) - ((a.traits||{}).fertility||0.5));
-    renderTop5('demo-top-fertility', topFert, a => `<span class="demo-rank">${a.name}</span> 👶 <strong>${Math.round(((a.traits||{}).fertility||0.5)*100)}%</strong>`);
+    renderTop5('demo-top-money', [...aliveAgents].sort((a,b) => (b.money||0)-(a.money||0)), a => `<span class="demo-rank">${a.name}</span> 💰 <strong>${(a.money||0).toFixed(1)}</strong>`);
+    renderTop5('demo-top-hp', [...aliveAgents].sort((a,b) => (b.hp||0)-(a.hp||0)), a => `<span class="demo-rank">${a.name}</span> ❤️ <strong>${Math.round(a.hp||0)}%</strong>`);
+    renderTop5('demo-top-intelligence', [...aliveAgents].sort((a,b) => ((b.traits||{}).intelligence||0.5)-((a.traits||{}).intelligence||0.5)), a => `<span class="demo-rank">${a.name}</span> 🧠 <strong>${Math.round(((a.traits||{}).intelligence||0.5)*100)}%</strong>`);
+    renderTop5('demo-top-courage', [...aliveAgents].sort((a,b) => ((b.traits||{}).courage||0.5)-((a.traits||{}).courage||0.5)), a => `<span class="demo-rank">${a.name}</span> 🛡️ <strong>${Math.round(((a.traits||{}).courage||0.5)*100)}%</strong>`);
+    renderTop5('demo-top-fertility', [...aliveAgents].sort((a,b) => ((b.traits||{}).fertility||0.5)-((a.traits||{}).fertility||0.5)), a => `<span class="demo-rank">${a.name}</span> 👶 <strong>${Math.round(((a.traits||{}).fertility||0.5)*100)}%</strong>`);
 
-    // Animals count (God Mode tab)
+    // Animals count
     const gacEl = document.getElementById('god-animals-count');
-    if (gacEl && typeof worldData !== 'undefined' && worldData && worldData.animals) {
-        gacEl.textContent = worldData.animals.length;
-    } else if (gacEl) {
-        // count from window cache if we stored it elsewhere
-        const ac = document.querySelectorAll('.animal-sprite').length || 0;
-        if (ac) gacEl.textContent = ac;
-    }
+    if (gacEl) gacEl.textContent = (worldData && worldData.animals ? worldData.animals.length : 0);
 }
 
 function addEventToLog(ev) {
