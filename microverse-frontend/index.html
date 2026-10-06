@@ -1,294 +1,248 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
-    <meta name="theme-color" content="#06120b">
-    <title>🌍 Microverse — AI Social Simulation v2</title>
-    <link rel="stylesheet" href="style.css">
-    <script src="https://cdn.jsdelivr.net/npm/pixi.js@7/dist/pixi.min.js"></script>
-    <script src="https://cdn.jsdelivr.net/npm/chart.js@4/dist/chart.umd.min.js"></script>
-    <script src="https://cdn.jsdelivr.net/npm/howler@2.2.4/dist/howler.min.js"></script>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+  <meta name="theme-color" content="#14141e">
+  <title>Microverse — AI Civilization Simulation</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@400;600;700;800&family=JetBrains+Mono:wght@500&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="style.css">
 </head>
 <body>
-    <!-- Glassmorphic Top Navbar -->
-    <nav id="top-navbar" class="glass-nav" aria-label="Main navigation">
-        <div class="nav-brand">
-            <span class="nav-icon">🌍</span>
-            <h1>Microverse <span class="nav-badge">v2</span></h1>
+  <!-- Loading Screen -->
+  <div id="loading-screen" aria-live="polite">
+    <div class="loader-brand">MICROVERSE</div>
+    <div class="loader-sub">Booting civilization systems…</div>
+    <div class="loader-bar"><div id="loader-fill"></div></div>
+    <div id="loader-pct">0%</div>
+  </div>
+
+  <!-- Glassmorphic Top Navbar -->
+  <nav id="top-navbar" class="glass-nav" aria-label="Main navigation">
+    <div class="nav-brand">
+      <span class="nav-icon" aria-hidden="true">◈</span>
+      <h1>Microverse <span class="nav-badge">v3</span></h1>
+    </div>
+    <div class="nav-tools">
+      <div id="connection-status" class="nav-status" title="Simulation mode">
+        <span id="status-dot" class="status-dot status-connected"></span>
+        <span id="status-text">Local Sim</span>
+      </div>
+      <button id="follow-btn" class="glass-btn" title="Follow selected agent (F)">Follow</button>
+      <button id="codex-btn" class="glass-btn" title="Open Codex">Codex</button>
+      <button id="achievements-btn" class="glass-btn" title="Achievements">Badges</button>
+      <button id="mute-btn" class="glass-btn" title="Toggle sound">Mute</button>
+      <div id="world-clock" class="nav-clock" title="In-world time">
+        <span id="clock-icon">☀</span>
+        <span id="clock-text">Day 1 · 12:00</span>
+      </div>
+      <div id="world-weather" class="nav-weather" title="Weather">
+        <span id="weather-icon">☁</span>
+        <span id="weather-text">Clear</span>
+      </div>
+      <div id="fps-meter" class="nav-fps" title="Frames per second">60 FPS</div>
+    </div>
+  </nav>
+
+  <button id="sidebar-toggle" class="glass-btn toggle-btn" aria-label="Toggle dashboard">
+    <span class="tool-icon">☰</span>
+    <span class="tool-text">Dashboard</span>
+  </button>
+  <div id="sidebar-backdrop"></div>
+
+  <div id="app">
+    <div id="game-wrapper">
+      <div id="game-container">
+        <canvas id="microverse-canvas" width="800" height="600"></canvas>
+        <div id="zoom-controls">
+          <button id="zoom-in-btn" title="Zoom In (+)">+</button>
+          <button id="zoom-out-btn" title="Zoom Out (-)">−</button>
+          <button id="zoom-center-btn" title="Center View">◎</button>
+          <div id="zoom-level">100%</div>
         </div>
-        <div class="nav-tools">
-            <div id="connection-status" class="nav-status">
-                <span id="status-dot" class="status-dot status-connecting"></span>
-                <span id="status-text">Connecting...</span>
-            </div>
-            <button id="follow-btn" class="glass-btn" title="Follow selected agent">👁️ Follow</button>
-            <button id="mute-btn" class="glass-btn" title="Toggle sound">🔇 Mute</button>
-            <div id="world-clock" class="nav-clock" title="In-world time">
-                <span id="clock-icon">☀️</span>
-                <span id="clock-text">Day 1 · 12:00</span>
-            </div>
-            <div id="world-weather" class="nav-weather" title="Weather">
-                <span id="weather-icon">🌤️</span>
-                <span id="weather-text">Clear</span>
-            </div>
+        <div id="minimap-container">
+          <div id="minimap-header">Minimap</div>
+          <canvas id="minimap-canvas" width="200" height="200"></canvas>
+          <div id="minimap-legend">
+            <span class="legend-item"><span class="legend-color" style="background:#4a90e2"></span>Water</span>
+            <span class="legend-item"><span class="legend-color" style="background:#2d5016"></span>Grass</span>
+            <span class="legend-item"><span class="legend-color" style="background:#f5a623"></span>Farm</span>
+            <span class="legend-item"><span class="legend-color" style="background:#1a3d0f"></span>Forest</span>
+            <span class="legend-item"><span class="legend-color" style="background:#3b82f6"></span>♂</span>
+            <span class="legend-item"><span class="legend-color" style="background:#ec4899"></span>♀</span>
+          </div>
         </div>
-    </nav>
-
-    <!-- Sidebar Toggle -->
-    <button id="sidebar-toggle" class="glass-btn toggle-btn" aria-label="Toggle dashboard">
-        <span class="tool-icon">☰</span>
-        <span class="tool-text">Dashboard</span>
-    </button>
-
-    <!-- Backdrop -->
-    <div id="sidebar-backdrop"></div>
-
-    <div id="app">
-        <!-- Game Area -->
-        <div id="game-wrapper">
-            <div id="game-container">
-                <div id="zoom-controls">
-                    <button id="zoom-in-btn" title="Zoom In">➕</button>
-                    <button id="zoom-out-btn" title="Zoom Out">➖</button>
-                    <button id="zoom-center-btn" title="Center View">🎯</button>
-                    <div id="zoom-level">100%</div>
-                </div>
-                <div id="minimap-container">
-                    <div id="minimap-header">🗺️ Minimap</div>
-                    <canvas id="minimap-canvas" width="120" height="120"></canvas>
-                    <div id="minimap-legend">
-                        <span class="legend-item"><span class="legend-color legend-water"></span>Water</span>
-                        <span class="legend-item"><span class="legend-color legend-grass"></span>Grass</span>
-                        <span class="legend-item"><span class="legend-color legend-farm"></span>Farm</span>
-                        <span class="legend-item"><span class="legend-color legend-forest"></span>Forest</span>
-                        <span class="legend-item"><span class="legend-color legend-male"></span>♂</span>
-                        <span class="legend-item"><span class="legend-color legend-female"></span>♀</span>
-                    </div>
-                </div>
-            </div>
-        </div>
-
-        <!-- Slide-in Drawer Sidebar -->
-        <aside id="sidebar" class="glass-drawer" aria-label="Dashboard">
-            <div id="sidebar-header">
-                <h2>📊 Dashboard</h2>
-                <button id="toggle-charts-btn" class="glass-btn" title="Toggle charts">📈 Charts</button>
-            </div>
-
-            <div class="tabs-header">
-                <button class="tab-btn active" data-tab="tab-overview">🏠 Overview</button>
-                <button class="tab-btn" data-tab="tab-demographics">👥 Demographics</button>
-                <button class="tab-btn" data-tab="tab-godmode">⚡ God Mode</button>
-            </div>
-
-            <div id="charts-panel" class="collapsed">
-                <div class="panel-header"><h3>📈 Live Trends</h3></div>
-                <div class="charts-grid">
-                    <div class="chart-card"><div class="chart-title">👥 Population</div><canvas id="chart-population" height="120"></canvas></div>
-                    <div class="chart-card"><div class="chart-title">🍕 Avg Hunger</div><canvas id="chart-hunger" height="120"></canvas></div>
-                    <div class="chart-card"><div class="chart-title">🌾 Total Wheat</div><canvas id="chart-wheat" height="120"></canvas></div>
-                </div>
-            </div>
-
-            <div id="tab-overview" class="tab-panel active">
-                <div class="dashboard-grid">
-                    <div class="stat-card"><span class="label">Total</span><span id="total-count" class="value">0</span></div>
-                    <div class="stat-card"><span class="label">Alive</span><span id="alive-count" class="value alive">0</span></div>
-                    <div class="stat-card"><span class="label">Dead</span><span id="dead-count" class="value dead">0</span></div>
-                    <div class="stat-card"><span class="label">Pregnant</span><span id="pregnant-count" class="value">0</span></div>
-                    <div class="stat-card"><span class="label">Males</span><span id="male-count" class="value">0</span></div>
-                    <div class="stat-card"><span class="label">Females</span><span id="female-count" class="value">0</span></div>
-                    <div class="stat-card"><span class="label">Season</span><span id="season-val" class="value">Spring</span></div>
-                    <div class="stat-card"><span class="label">Weather</span><span id="weather-val" class="value">Clear</span></div>
-                    <div class="stat-card"><span class="label">Wheat Price</span><span id="wheat-price" class="value">1.0</span></div>
-                    <div class="stat-card"><span class="label">🌾 Wheat</span><span id="wheat-total" class="value">0</span></div>
-                    <div class="stat-card"><span class="label">🪵 Wood</span><span id="wood-total" class="value">0</span></div>
-                    <div class="stat-card"><span class="label">🪨 Stone</span><span id="stone-total" class="value">0</span></div>
-                    <div class="stat-card"><span class="label">💰 Money</span><span id="money-total" class="value">0</span></div>
-                    <div class="stat-card res-grain"><span class="label">🌾 Grain</span><span id="grain-total" class="value">0</span></div>
-                    <div class="stat-card res-veg"><span class="label">🥬 Vegetable</span><span id="vegetable-total" class="value">0</span></div>
-                    <div class="stat-card res-fruit"><span class="label">🍎 Fruit</span><span id="fruit-total" class="value">0</span></div>
-                    <div class="stat-card res-ind"><span class="label">🏭 Industrial</span><span id="industrial-total" class="value">0</span></div>
-                    <div class="stat-card res-metal"><span class="label">⚙️ Metal</span><span id="metal-total" class="value">0</span></div>
-                    <div class="stat-card res-animal"><span class="label">🥛 Animal Prod</span><span id="animal_product-total" class="value">0</span></div>
-                    <div class="stat-card"><span class="label">Sleeping</span><span id="state-sleeping" class="value">0</span></div>
-                    <div class="stat-card"><span class="label">Eating</span><span id="state-eating" class="value">0</span></div>
-                    <div class="stat-card"><span class="label">Farming</span><span id="state-farming" class="value">0</span></div>
-                    <div class="stat-card"><span class="label">Walking</span><span id="state-walking" class="value">0</span></div>
-                </div>
-            </div>
-
-            <div id="tab-demographics" class="tab-panel">
-                <div class="demo-section"><h4 class="demo-title">🏆 Top 5 — Richest</h4><ul id="demo-top-money" class="demo-list"></ul></div>
-                <div class="demo-section"><h4 class="demo-title">❤️ Top 5 — Healthiest</h4><ul id="demo-top-hp" class="demo-list"></ul></div>
-                <div class="demo-section"><h4 class="demo-title">🧬 Top 5 — Smartest</h4><ul id="demo-top-intelligence" class="demo-list"></ul></div>
-                <div class="demo-section"><h4 class="demo-title">🛡️ Top 5 — Bravest</h4><ul id="demo-top-courage" class="demo-list"></ul></div>
-                <div class="demo-section"><h4 class="demo-title">👶 Top 5 — Most Fertile</h4><ul id="demo-top-fertility" class="demo-list"></ul></div>
-            </div>
-
-            <div id="tab-godmode" class="tab-panel">
-                <div class="god-section collapsible-section">
-                    <h4 class="god-title section-toggle" data-target="sec-weather">🌤️ Weather ▾</h4>
-                    <div id="sec-weather" class="section-content">
-                        <div class="god-btn-row">
-                            <button class="god-btn weather-btn" data-weather="clear">☀️ Clear</button>
-                            <button class="god-btn weather-btn" data-weather="rain">🌧️ Rain</button>
-                            <button class="god-btn weather-btn" data-weather="snow">🌨️ Snow</button>
-                        </div>
-                    </div>
-                </div>
-                <div class="god-section collapsible-section">
-                    <h4 class="god-title section-toggle" data-target="sec-seasons">🌱 Seasons ▾</h4>
-                    <div id="sec-seasons" class="section-content">
-                        <div class="god-btn-row">
-                            <button class="god-btn season-btn" data-season="spring">🌱 Spring</button>
-                            <button class="god-btn season-btn" data-season="summer">☀️ Summer</button>
-                            <button class="god-btn season-btn" data-season="autumn">🍂 Autumn</button>
-                            <button class="god-btn season-btn" data-season="winter">❄️ Winter</button>
-                        </div>
-                    </div>
-                </div>
-                <div class="god-section collapsible-section">
-                    <h4 class="god-title section-toggle" data-target="sec-tile-editor">🖌️ Tile Editor ▾</h4>
-                    <div id="sec-tile-editor" class="section-content">
-                        <div class="god-btn-row">
-                            <button id="tile-edit-toggle-btn" class="god-btn tile-edit-btn">🖌️ Edit Tile Mode: <span id="tile-edit-status" class="status-label">OFF</span></button>
-                        </div>
-                    </div>
-                </div>
-                <div class="god-section collapsible-section">
-                    <h4 class="god-title section-toggle" data-target="sec-agents-edit">👤 Agent Editor ▾</h4>
-                    <div id="sec-agents-edit" class="section-content">
-                        <div id="god-agent-info" class="god-label">Selected Agent: <strong id="god-selected-agent-name">—</strong></div>
-                        <div class="god-btn-row"><button id="god-open-edit-btn" class="god-btn" disabled>✏️ Open Editor</button></div>
-                    </div>
-                </div>
-                <div class="god-section collapsible-section">
-                    <h4 class="god-title section-toggle" data-target="sec-global">⚡ Global Commands ▾</h4>
-                    <div id="sec-global" class="section-content">
-                        <div class="god-btn-row">
-                            <button class="god-btn danger global-cmd" data-action="kill_all">☠️ Kill All</button>
-                            <button class="god-btn success global-cmd" data-action="revive_all">💚 Revive All</button>
-                        </div>
-                        <div class="god-btn-row">
-                            <button class="god-btn warn global-cmd" data-action="force_weather" data-value="rain">🌧️ Force Rain</button>
-                            <button class="god-btn warn global-cmd" data-action="force_season" data-value="winter">❄️ Force Winter</button>
-                        </div>
-                        <div class="god-btn-row">
-                            <button class="god-btn info global-cmd" data-action="fill_all_needs">❤️ Fill All Needs</button>
-                            <button class="god-btn spawn-btn global-cmd" data-action="spawn_animals" data-value="10">🐑 Spawn 10</button>
-                        </div>
-                        <div class="god-btn-row">
-                            <button class="god-btn money global-cmd" data-action="give_money_all" data-value="500">💰 Give $500 All</button>
-                        </div>
-                    </div>
-                </div>
-                <div class="god-section collapsible-section">
-                    <h4 class="god-title section-toggle" data-target="sec-animals">🐄 Animals ▾</h4>
-                    <div id="sec-animals" class="section-content">
-                        <div class="god-btn-row">
-                            <button class="god-btn spawn-btn global-cmd" data-action="spawn_animals" data-value="1">+1</button>
-                            <button class="god-btn spawn-btn global-cmd" data-action="spawn_animals" data-value="5">+5</button>
-                            <button class="god-btn spawn-btn global-cmd" data-action="spawn_animals" data-value="10">+10</button>
-                        </div>
-                        <div class="god-btn-row"><span class="god-label">Animals: <strong id="god-animals-count">0</strong></span></div>
-                    </div>
-                </div>
-            </div>
-
-            <div id="event-log-section">
-                <div id="event-log-header"><h3>📜 Event Log</h3><button id="clear-log-btn">🗑️</button></div>
-                <ul id="event-log"></ul>
-            </div>
-        </aside>
+        <div id="tooltip" class="glass-tooltip" hidden></div>
+      </div>
     </div>
 
-    <div id="control-panel">
-        <div class="control-group">
-            <span class="group-label">Playback</span>
-            <button id="pause-btn" class="ctrl-btn">⏸ Pause</button>
-            <button id="resume-btn" class="ctrl-btn">▶ Resume</button>
-            <button id="reset-btn" class="ctrl-btn danger">🔄 Reset</button>
+    <aside id="sidebar" class="glass-drawer" aria-label="Dashboard">
+      <div id="sidebar-header">
+        <h2>Dashboard</h2>
+        <button id="toggle-charts-btn" class="glass-btn" title="Toggle charts">Charts</button>
+      </div>
+
+      <div class="tabs-header">
+        <button class="tab-btn active" data-tab="tab-overview">Overview</button>
+        <button class="tab-btn" data-tab="tab-observer">Observer</button>
+        <button class="tab-btn" data-tab="tab-godmode">God Mode</button>
+      </div>
+
+      <div id="charts-panel" class="collapsed">
+        <div class="panel-header"><h3>Live Trends</h3></div>
+        <div class="charts-grid">
+          <div class="chart-card">
+            <div class="chart-title">Population</div>
+            <canvas id="chart-population" width="280" height="100"></canvas>
+          </div>
+          <div class="chart-card">
+            <div class="chart-title">Happiness</div>
+            <canvas id="chart-hunger" width="280" height="100"></canvas>
+          </div>
+          <div class="chart-card">
+            <div class="chart-title">GDP</div>
+            <canvas id="chart-wheat" width="280" height="100"></canvas>
+          </div>
         </div>
-        <div class="divider"></div>
-        <div class="control-group">
-            <span class="group-label">Speed</span>
-            <button id="speed-01x-btn" class="speed-btn" data-speed="0.01">⚡ 100x</button>
-            <button id="speed-10x-btn" class="speed-btn" data-speed="0.1">🐢 10x</button>
-            <button id="speed-1x-btn" class="speed-btn active" data-speed="1.0">⏱ 1x</button>
+      </div>
+
+      <div id="tab-overview" class="tab-panel active">
+        <div class="dashboard-grid">
+          <div class="stat-card"><span class="label">Agents</span><span id="total-count" class="value">0</span></div>
+          <div class="stat-card"><span class="label">Alive</span><span id="alive-count" class="value alive">0</span></div>
+          <div class="stat-card"><span class="label">Season</span><span id="season-val" class="value">Spring</span></div>
+          <div class="stat-card"><span class="label">Weather</span><span id="weather-val" class="value">Clear</span></div>
+          <div class="stat-card"><span class="label">Wheat $</span><span id="wheat-price" class="value">1.0</span></div>
+          <div class="stat-card"><span class="label">Wood $</span><span id="wood-price" class="value">1.0</span></div>
+          <div class="stat-card"><span class="label">GDP</span><span id="gdp-val" class="value">0</span></div>
+          <div class="stat-card"><span class="label">Happiness</span><span id="happy-val" class="value">0</span></div>
+          <div class="stat-card"><span class="label">Tech</span><span id="tech-val" class="value">0</span></div>
+          <div class="stat-card"><span class="label">Culture</span><span id="culture-val" class="value">0</span></div>
+          <div class="stat-card"><span class="label">Tick</span><span id="tick-val" class="value">0</span></div>
+          <div class="stat-card"><span class="label">Speed</span><span id="speed-val" class="value">1x</span></div>
         </div>
+        <div id="event-log-section">
+          <div id="event-log-header"><h3>Event Log</h3><button id="clear-log-btn" class="glass-btn">Clear</button></div>
+          <ul id="event-log"></ul>
+        </div>
+      </div>
+
+      <div id="tab-observer" class="tab-panel">
+        <div id="observer-panel" class="observer-card">
+          <h3 id="obs-name">Select an agent</h3>
+          <p id="obs-thought" class="obs-thought">Click an agent on the map to observe their thoughts.</p>
+          <div class="obs-needs" id="obs-needs"></div>
+          <div class="obs-relations" id="obs-relations"></div>
+          <div class="obs-memory" id="obs-memory"></div>
+        </div>
+      </div>
+
+      <div id="tab-godmode" class="tab-panel">
+        <div class="god-section">
+          <h4 class="god-title">Weather</h4>
+          <div class="god-btn-row">
+            <button class="god-btn weather-btn" data-weather="clear">Clear</button>
+            <button class="god-btn weather-btn" data-weather="rain">Rain</button>
+            <button class="god-btn weather-btn" data-weather="snow">Snow</button>
+            <button class="god-btn weather-btn" data-weather="storm">Storm</button>
+            <button class="god-btn weather-btn" data-weather="fog">Fog</button>
+          </div>
+        </div>
+        <div class="god-section">
+          <h4 class="god-title">Seasons</h4>
+          <div class="god-btn-row">
+            <button class="god-btn season-btn" data-season="spring">Spring</button>
+            <button class="god-btn season-btn" data-season="summer">Summer</button>
+            <button class="god-btn season-btn" data-season="autumn">Autumn</button>
+            <button class="god-btn season-btn" data-season="winter">Winter</button>
+          </div>
+        </div>
+        <div class="god-section">
+          <h4 class="god-title">Divine Acts</h4>
+          <div class="god-btn-row">
+            <button class="god-btn success" id="god-spawn">Spawn Agent</button>
+            <button class="god-btn warn" id="god-disaster">Disaster</button>
+            <button class="god-btn info" id="god-bless">Bless Selected</button>
+            <button class="god-btn danger" id="god-curse">Curse Selected</button>
+          </div>
+        </div>
+        <div class="god-section">
+          <h4 class="god-title">Save / Load</h4>
+          <div class="god-btn-row">
+            <button class="god-btn" id="save-btn">Save Slot 0</button>
+            <button class="god-btn" id="load-btn">Load Slot 0</button>
+            <button class="god-btn" id="screenshot-btn">Screenshot</button>
+          </div>
+        </div>
+        <div class="god-section">
+          <h4 class="god-title">Creative</h4>
+          <div class="god-btn-row">
+            <button class="god-btn" id="new-world-btn">New World Seed</button>
+            <button class="god-btn" id="challenge-btn">Daily Challenge</button>
+            <button class="god-btn" id="director-btn">AI Director</button>
+          </div>
+        </div>
+      </div>
+    </aside>
+  </div>
+
+  <div id="control-panel">
+    <div class="control-group">
+      <span class="group-label">Playback</span>
+      <button id="pause-btn" class="ctrl-btn">Pause</button>
+      <button id="resume-btn" class="ctrl-btn">Resume</button>
+      <button id="reset-btn" class="ctrl-btn danger">Reset</button>
     </div>
-
-    <div id="agent-details-popup" class="popup">
-        <div class="popup-content">
-            <span class="close-button">&times;</span>
-            <h3 id="detail-title">👤 Agent Details
-                <button id="edit-toggle-btn" class="edit-mode-btn">✏️</button>
-                <button id="edit-save-btn" class="edit-save-btn" style="display:none">💾 Save</button>
-                <button id="edit-cancel-btn" class="edit-cancel-btn" style="display:none">❌ Cancel</button>
-            </h3>
-            <div class="detail-header">
-                <div class="avatar-circle" id="detail-avatar">?</div>
-                <div class="basic-info">
-                    <p class="name-line"><strong id="detail-name">-</strong> <span id="detail-gender-badge" class="gender-badge">-</span></p>
-                    <p class="sub-line">Age: <span id="detail-age">-</span> · State: <span id="detail-state-badge" class="state-badge">-</span></p>
-                </div>
-            </div>
-            <div class="stats-section">
-                <div class="stat-bar"><span class="stat-label">❤️ HP</span><div class="bar-container"><div id="detail-hp" class="bar bar-hp"></div></div><span class="stat-num" id="detail-hp-num">0%</span></div>
-                <div class="stat-bar"><span class="stat-label">🍕 Hunger</span><div class="bar-container"><div id="detail-hunger" class="bar bar-hunger"></div></div><span class="stat-num" id="detail-hunger-num">0%</span></div>
-                <div class="stat-bar"><span class="stat-label">⚡ Energy</span><div class="bar-container"><div id="detail-energy" class="bar bar-energy"></div></div><span class="stat-num" id="detail-energy-num">0%</span></div>
-                <div class="stat-bar"><span class="stat-label">😊 Mood</span><div class="bar-container"><div id="detail-mood" class="bar bar-mood"></div></div><span class="stat-num" id="detail-mood-num">0%</span></div>
-                <div class="stat-bar" id="money-bar-row"><span class="stat-label">💰 Money</span><div class="bar-container" style="opacity:0.4"><div class="bar" style="width:50%;background:linear-gradient(90deg,#f59e0b,#fbbf24)"></div></div><span class="stat-num" id="detail-money-stat">0</span></div>
-            </div>
-            <div class="traits-section"><h4>🧬 Traits</h4><div class="traits-grid" id="detail-traits"></div></div>
-            <div class="inventory-section"><h4>🎒 Inventory</h4><div class="inventory-list"><span>🌾 Wheat: <strong id="detail-wheat">0</strong></span><span>🪵 Wood: <strong id="detail-wood">0</strong></span><span>🪨 Stone: <strong id="detail-stone">0</strong></span><span>💰 Money: <strong id="detail-money">0</strong></span></div></div>
-            <div class="relations-section"><h4>❤️ Relationships</h4><p id="detail-relationships" class="relations-list">None</p></div>
-        </div>
+    <div class="divider"></div>
+    <div class="control-group">
+      <span class="group-label">Speed</span>
+      <button class="speed-btn" data-speed="0.5">0.5x</button>
+      <button class="speed-btn active" data-speed="1">1x</button>
+      <button class="speed-btn" data-speed="2">2x</button>
+      <button class="speed-btn" data-speed="5">5x</button>
+      <button class="speed-btn" data-speed="10">10x</button>
     </div>
+  </div>
 
-    <div id="tile-editor-popup" class="popup tile-popup">
-        <div class="popup-content tile-popup-content">
-            <span class="close-button tile-close">&times;</span>
-            <h3>🖌️ Edit Tile — (<span id="tile-pos-x">0</span>, <span id="tile-pos-y">0</span>)</h3>
-            <p class="tile-current-info">Current: <strong id="tile-current-type">Plains</strong> <span id="tile-current-growth" style="margin-left:12px;opacity:0.8;"></span></p>
-            <div class="tile-type-grid">
-                <button class="tile-type-btn active" data-type="0"><span class="tile-icon plains-icon"></span><span>🌿 Plains</span></button>
-                <button class="tile-type-btn" data-type="1"><span class="tile-icon water-icon"></span><span>💧 Water</span></button>
-                <button class="tile-type-btn" data-type="2"><span class="tile-icon farm-icon"></span><span>🌾 Farmland</span></button>
-                <button class="tile-type-btn" data-type="3"><span class="tile-icon forest-icon"></span><span>🌲 Forest</span></button>
-                <button class="tile-type-btn" data-type="4"><span class="tile-icon desert-icon"></span><span>🏜️ Desert</span></button>
-                <button class="tile-type-btn" data-type="5"><span class="tile-icon snow-icon"></span><span>❄️ Snow</span></button>
-                <button class="tile-type-btn" data-type="6"><span class="tile-icon swamp-icon"></span><span>🌫️ Swamp</span></button>
-            </div>
-            <div class="tile-growth-row" id="tile-growth-row" style="display:none;"><label class="stat-label">🌱 Crop Growth:</label><input type="range" id="tile-growth-range" min="0" max="1" step="0.01" value="0"><span id="tile-growth-val" class="stat-num">0%</span></div>
-            <div class="tile-actions-row"><button id="tile-apply-btn" class="god-btn success" style="flex:1;">💾 Apply</button><button id="tile-cancel-btn" class="god-btn warn" style="flex:1;">❌ Cancel</button></div>
-        </div>
+  <!-- Codex -->
+  <div id="codex-panel" class="glass-drawer" aria-label="Entity Codex" hidden>
+    <div class="codex-header">
+      <h3>Codex — <span id="codex-count">0</span> entities</h3>
+      <button id="codex-close" class="glass-btn">✕</button>
     </div>
-
-    <!-- Codex / Encyclopedia Panel -->
-    <div id="codex-panel" class="glass-drawer" style="width:min(360px,85vw);z-index:90;" aria-label="Entity Codex">
-        <div class="codex-header">
-            <h3>📚 Codex</h3>
-            <button id="codex-close" class="glass-btn">✕</button>
-        </div>
-        <div id="codex-search" style="padding:0 12px 12px;">
-            <input type="text" id="codex-filter" placeholder="Search entities..." class="glass-btn" style="width:100%;padding:8px 12px;font-size:0.85rem;">
-        </div>
-        <div id="codex-grid" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(140px,1fr));gap:10px;padding:0 12px 12px;overflow-y:auto;max-height:calc(100vh - 200px);">
-        </div>
+    <div id="codex-search">
+      <input type="text" id="codex-filter" placeholder="Search entities…" autocomplete="off">
+      <select id="codex-category">
+        <option value="all">All</option>
+        <option value="agents">Agents</option>
+        <option value="wildlife">Wildlife</option>
+        <option value="flora">Flora</option>
+        <option value="structures">Structures</option>
+        <option value="resources">Resources</option>
+        <option value="events">Events</option>
+      </select>
     </div>
+    <div id="codex-grid"></div>
+  </div>
 
-    <nav id="mobile-nav" class="mobile-nav" aria-label="Mobile navigation">
-        <div class="mobile-nav-inner">
-            <button class="nav-btn active" data-tab="overview" aria-label="Overview"><span class="nav-icon">📊</span><span class="nav-label">Overview</span></button>
-            <button class="nav-btn" data-tab="demographics" aria-label="People"><span class="nav-icon">👥</span><span class="nav-label">People</span></button>
-            <button class="nav-btn" data-tab="environment" aria-label="World"><span class="nav-icon">🌦️</span><span class="nav-label">World</span></button>
-            <button class="nav-btn" data-tab="godmode" aria-label="God Mode"><span class="nav-icon">⚙️</span><span class="nav-label">God</span></button>
-        </div>
-    </nav>
+  <!-- Achievements -->
+  <div id="achievements-panel" class="glass-drawer" aria-label="Achievements" hidden>
+    <div class="codex-header">
+      <h3>Achievements</h3>
+      <button id="achievements-close" class="glass-btn">✕</button>
+    </div>
+    <ul id="achievements-list"></ul>
+  </div>
 
-    <script type="module" src="main.js"></script>
+  <!-- Tutorial toast -->
+  <div id="tutorial-toast" hidden>
+    <strong>Welcome to Microverse</strong>
+    <p>Drag to pan · Scroll to zoom · Click agents to observe · WASD to move · God Mode in Dashboard</p>
+    <button id="tutorial-dismiss" class="glass-btn">Got it</button>
+  </div>
+
+  <script type="module" src="main.js"></script>
 </body>
 </html>

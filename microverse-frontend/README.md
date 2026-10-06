@@ -1,48 +1,70 @@
-# Microverse Frontend
+# Microverse Frontend v3
 
-This is the frontend application for the Microverse project, built with PixiJS.
+Professional **HTML5 Canvas 2D** AI civilization simulation. Runs fully offline — no PIXI, no required backend.
 
-## Features
+## Quick Start
 
--   2D grid visualization (40x40 cells).
--   Dynamic rendering of agents (circles with gender-based colors, names, and pregnancy halos).
--   Smooth agent movement using linear interpolation.
--   Connection to the Microverse Backend via REST API for initial data and Server-Sent Events (SSE) for real-time updates.
--   Control panel for pausing/resuming simulation, adjusting speed, and resetting the world.
--   Sidebar displaying current tick, agent count, and event log.
--   Agent details popup on click, showing stats and relationships.
+```bash
+cd microverse-frontend
+npx serve -l 5173 .
+# open http://localhost:5173
+```
 
-## Technologies
+Or any static file server that supports ES modules.
 
--   HTML5
--   CSS3
--   JavaScript (ES6+)
--   PixiJS v7 (loaded via CDN)
+## What You Get
 
-## Setup and Running Locally
+- **50×50 procedural world** (grass, water, farm, stone, beach, mountain, forest, river)
+- **12+ living agents** with needs, personality, goals, and thoughts
+- **Real-time minimap** (200×200) with click-to-teleport
+- **Day/night**, seasons, weather (rain / snow / storm / fog)
+- **Economy**, culture, conflict, and observer mode
+- **God Mode** — spawn, bless, curse, disasters, time control
+- **Codex** — 500+ entity catalog
+- **Creative extras** — Achievements, AI Director, Daily Challenge, Screenshot, procedural New World Seed
 
-1.  **Ensure Backend is Running**: This frontend connects to a deployed backend at `https://microverse-backend.onrender.com`. Make sure the backend is accessible.
+## Controls
 
-2.  **Clone the Repository (if not already done)**:
-    ```bash
-    git clone https://github.com/mnidaleddin-hub/microverse.git
-    cd microverse/microverse-frontend
-    ```
+| Input | Action |
+|-------|--------|
+| Drag | Pan camera |
+| Scroll / `+` `-` | Zoom (50%–300%) |
+| WASD / Arrows | Pan |
+| Click agent | Select + Observer |
+| `F` | Follow selected |
+| `Space` | Pause / resume |
+| Minimap click | Jump camera |
+| Dashboard | Stats, God Mode, charts |
 
-3.  **Serve Statically**: Since this is a pure static HTML/CSS/JS application, you can serve it using any simple web server.
+## Architecture
 
-    *   **Using Python (recommended for simplicity)**:
-        Navigate to the `microverse-frontend` directory in your terminal and run:
-        ```bash
-        python -m http.server 8000
-        ```
-        Then open your browser to `http://localhost:8000`.
+```
+main.js                 # Boot, RAF loop, UI wiring
+src/systems/
+  visual.js             # Canvas engine, camera, particles, lighting
+  social_ai.js          # Needs / decisions / memory / relationships
+  economy.js            # Prices, trade, GDP
+  conflict_politics.js  # Factions, skirmishes, treaties
+  culture.js            # Tech, festivals, art
+  environment.js        # Seasons, weather, day/night, disasters
+  gameplay.js           # God queue, save/load, speed
+  analytics.js          # Metrics + history charts
+  observer.js           # Focus panel data
+src/data/registry.json  # 500+ entities
+```
 
-    *   **Using Live Server VS Code Extension**: If you use VS Code, you can install the "Live Server" extension by Ritwick Dey. Right-click `index.html` and select "Open with Live Server".
+## Save / Load
 
-## Deployment to Vercel (Drag and Drop)
+Uses `localStorage` key `microverse_save` (slots 0–4). Auto-save every 100 ticks.
 
-1.  Go to [Vercel](https://vercel.com/) and log in.
-2.  Drag and drop the entire `microverse-frontend` folder onto the Vercel dashboard.
-3.  Vercel will automatically detect the project as a static site and deploy it.
-4.  You will be provided with a live URL for your frontend application.
+Debug: `window.__MICROVERSE__` exposes `{ world, getEngine, saveWorld, loadWorld }`.
+
+## Performance Targets
+
+- 60 FPS with ~100 agents (culling + particle pool)
+- Codex virtualizes to 120 visible cards
+- Event log capped; history capped at 120 samples
+
+## License
+
+Part of the Microverse project.
